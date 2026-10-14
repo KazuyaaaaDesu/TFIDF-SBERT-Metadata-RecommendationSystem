@@ -295,6 +295,8 @@ The corpus work uses publicly available academic metadata and open-access docume
 7. **Single-node operation.** SQLite and local storage bound scale and concurrency; the findings describe the prototype, not a production service.
 8. **Purposive evaluation sample.** The end-users and IT experts are purposively selected rather than randomly sampled, so the acceptability and quality ratings describe the participating groups and do not generalize to all students or practitioners.
 
+9. **Open-source web search, no licensed indexes.** The web-search and PDF-discovery features draw only on open scholarly sources (OpenAlex, Crossref, arXiv, DOAJ, Semantic Scholar and Unpaywall). Scopus and Web of Science are not queried, because both require an institutional licence or API credentials, and neither OpenAlex nor Crossref reports whether a journal is indexed in them. The system therefore cannot restrict results to Scopus- or Web of Science-indexed journals, and its coverage of paywalled, licensed-index literature is partial. See `limitation-bibliographic-sources.md`.
+
 ### AI-Assisted Research Disclosure
 
 AI-assisted tools were used for drafting this chapter and for scaffolding code during development. All citations were manually verified against the approved source list; no authors, DOIs, statistics, or implementation details were fabricated, and every technical claim was checked against the repository code, its tests, and the live database. The full provenance and verification trail is kept in the file audit-trail.md.

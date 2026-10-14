@@ -6,6 +6,9 @@
  *   birch    ovate with a drawn-out point, a toothed edge, a broad base
  *   elm      oval and lopsided at the base, toothed, with parallel side veins
  *   redwood  a flat spray: a twig with short needles set along both sides
+ *   bean     a broad heart-shaped leaflet with a pointed tip and side veins
+ *   rose     a rose bloom seen from the front: scalloped petals round a spiral
+ *   sprig    a rose's compound leaf: three oval leaflets on one stalk
  *
  * A leaf is worked out once as a list of pixels around its center, each with
  * a shade index into a five-step color ramp (0 darkest .. 4 lightest). Detail
@@ -15,7 +18,15 @@
  * Pure and dependency-free, so it runs under `node --test`.
  */
 
-export type LeafShape = "maple" | "lobed" | "birch" | "elm" | "redwood";
+export type LeafShape =
+  | "maple"
+  | "lobed"
+  | "birch"
+  | "elm"
+  | "redwood"
+  | "bean"
+  | "rose"
+  | "sprig";
 
 export interface LeafPixels {
   dx: number[];
@@ -216,6 +227,106 @@ function redwoodAt(a: number, b: number, r: number): Hit {
   return MISS;
 }
 
+function beanAt(a: number, b: number, r: number): Hit {
+  /* a heart-shaped leaflet: broad shoulders at the base, a drawn-out tip */
+  const L = r * 2.3;
+  const t = (a + L / 2) / L;
+
+  if (t < 0 || t > 1) return MISS;
+
+  const body = Math.pow(Math.sin(Math.PI * Math.pow(t, 0.7)), 0.82);
+  const shoulders = 1 + 0.2 * Math.max(0, 1 - t / 0.26);
+  const taper = 1 - 0.5 * Math.pow(t, 2.4);
+  const half = r * 0.98 * body * shoulders * taper;
+  /* a small notch where the stalk meets the blade */
+  const notch = t < 0.07 && Math.abs(b) < 0.45;
+
+  if (Math.abs(b) > half || notch) {
+    if (r >= 3.8 && t < 0.06 && Math.abs(b) < 0.5) return { inside: true, kind: 2, rim: 0 };
+
+    return MISS;
+  }
+
+  let kind: 0 | 1 = 0;
+
+  if (r >= 3) {
+    if (Math.abs(b) < 0.4 && t > 0.05 && t < 0.93) kind = 1;
+    /* side veins sweep forward from the midrib */
+    else if (r >= 4.5 && t > 0.14 && t < 0.88) {
+      const along = (t * L) % 3;
+      const slant = Math.abs(b) - along * 0.7;
+
+      if (Math.abs(slant) < 0.28 && Math.abs(b) < half * 0.84) kind = 1;
+    }
+  }
+
+  return { inside: true, kind, rim: clamp01((Math.abs(b) - half * 0.74) / Math.max(0.5, half * 0.26)) };
+}
+
+function roseAt(a: number, b: number, r: number): Hit {
+  /* a bloom: five scallops round the edge, petals wound in a spiral */
+  const R = r * 1.02;
+  const d = Math.hypot(a, b);
+  const theta = Math.atan2(b, a);
+  const edge = R * (r >= 2.4 ? 0.88 + 0.12 * Math.cos(5 * theta) : 0.96);
+
+  if (d > edge) return MISS;
+
+  let kind: 0 | 1 = 0;
+
+  if (r >= 2.6) {
+    if (d < R * 0.2) kind = 1;
+    else {
+      /* the winding petal edges */
+      const turn = d / (R * 0.3) + (theta / (Math.PI * 2)) * 1.6;
+      const f = turn - Math.floor(turn);
+
+      if (f < 0.16 && d > R * 0.2) kind = 1;
+    }
+  }
+
+  return { inside: true, kind, rim: clamp01((d - edge * 0.7) / Math.max(0.5, edge * 0.3)) };
+}
+
+/** An oval leaflet centered `(ca, cb)`, pointing `phi`, half-length `len`, half-width `wid`. */
+function leaflet(a: number, b: number, ca: number, cb: number, phi: number, len: number, wid: number) {
+  const da = a - ca;
+  const db = b - cb;
+  const u = (da * Math.cos(phi) + db * Math.sin(phi)) / len;
+  const v = (-da * Math.sin(phi) + db * Math.cos(phi)) / wid;
+  /* pointed at the tip: narrower toward +u */
+  const pinch = u > 0 ? 1 - 0.45 * u : 1;
+  const inside = u >= -1 && u <= 1 && Math.abs(v) <= Math.max(0, pinch) * Math.sqrt(Math.max(0, 1 - u * u * 0.85));
+
+  return { inside, u, v };
+}
+
+function sprigAt(a: number, b: number, r: number): Hit {
+  /* three leaflets: a long one ahead, a pair swept back either side */
+  const len = r * 0.8;
+  const wid = r * 0.42;
+  const parts: [number, number, number, number][] = [
+    [r * 0.45, 0, 0, len],
+    [-r * 0.05, r * 0.42, 0.95, len * 0.78],
+    [-r * 0.05, -r * 0.42, -0.95, len * 0.78],
+  ];
+
+  for (const [ca, cb, phi, l] of parts) {
+    const hit = leaflet(a, b, ca, cb, phi, l, wid * (l / len));
+
+    if (hit.inside) {
+      const kind: 0 | 1 = r >= 3 && Math.abs(hit.v) < 0.12 ? 1 : 0;
+
+      return { inside: true, kind, rim: clamp01((Math.abs(hit.v) - 0.55) / 0.45) };
+    }
+  }
+
+  /* the stalk joining them to the twig */
+  if (r >= 3.4 && a < -r * 0.3 && a > -r * 1.1 && Math.abs(b) < 0.45) return { inside: true, kind: 2, rim: 0 };
+
+  return MISS;
+}
+
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 const SHAPES: Record<LeafShape, (a: number, b: number, r: number) => Hit> = {
@@ -224,6 +335,9 @@ const SHAPES: Record<LeafShape, (a: number, b: number, r: number) => Hit> = {
   birch: birchAt,
   elm: elmAt,
   redwood: redwoodAt,
+  bean: beanAt,
+  rose: roseAt,
+  sprig: sprigAt,
 };
 
 /**

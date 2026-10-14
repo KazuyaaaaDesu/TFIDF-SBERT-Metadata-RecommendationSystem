@@ -972,7 +972,7 @@ export default function ConnectedPapersGraph({
               onChange={(event) =>
                 setStrengthPct(Number(event.target.value))
               }
-              className="w-36 accent-[#f39c18]"
+              className="w-36"
             />
             <span className="w-10 font-mono text-gray-900">
               {strengthPct}%

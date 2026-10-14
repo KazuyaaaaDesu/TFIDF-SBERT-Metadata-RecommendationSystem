@@ -19,12 +19,41 @@
  */
 
 import type { Paper } from "../api";
+import {
+  formatApa,
+  formatChicago,
+  formatIeee,
+  formatMla,
+  paperAuthors,
+} from "./authorNames.ts";
 import type { CitationStyle } from "./preferences";
 
-function author(paper: Paper): string {
-  const value = (paper.author ?? "").trim();
+/**
+ * The author block in the form `style` writes it, built from the
+ * stored given / middle / family parts: APA "Smith, J. M., & Doe, J.",
+ * MLA "Smith, John Michael, and Jane Doe", IEEE "J. M. Smith and
+ * J. Doe". Each style applies its own et-al. rule.
+ */
+function author(paper: Paper, style: CitationStyle): string {
+  const names = paperAuthors(paper);
 
-  return value || "Unknown author";
+  if (!names.length) return "Unknown author";
+
+  switch (style) {
+    case "apa":
+      return formatApa(names);
+    case "mla":
+      return formatMla(names);
+    case "chicago":
+      return formatChicago(names);
+    case "ieee":
+      return formatIeee(names);
+  }
+}
+
+/** A name block ends in exactly one full stop ("et al." keeps its own). */
+function end(text: string): string {
+  return text.endsWith(".") ? text : `${text}.`;
 }
 
 function year(paper: Paper): string {
@@ -93,7 +122,7 @@ export function citationParts(
   includeDoi: boolean,
   index?: number
 ): CitationParts {
-  const names = author(paper);
+  const names = author(paper, style);
   const when = year(paper);
   const work = title(paper);
   const doi = doiSuffix(paper, includeDoi, style);
@@ -122,27 +151,27 @@ export function citationParts(
     case "mla":
       if (standalone) {
         return {
-          text: `${names}. ${work}. ${when}.${doi}`,
-          html: `${safeNames}. ${italic}. ${when}.${safeDoi}`,
+          text: `${end(names)} ${work}. ${when}.${doi}`,
+          html: `${end(safeNames)} ${italic}. ${when}.${safeDoi}`,
         };
       }
 
       return {
-        text: `${names}. ${quotedWork}. ${when}.${doi}`,
-        html: `${safeNames}. ${escapeHtml(quotedWork)}. ${when}.${safeDoi}`,
+        text: `${end(names)} ${quotedWork}. ${when}.${doi}`,
+        html: `${end(safeNames)} ${escapeHtml(quotedWork)}. ${when}.${safeDoi}`,
       };
 
     case "chicago":
       if (standalone) {
         return {
-          text: `${names}. ${work}. ${when}.${doi}`,
-          html: `${safeNames}. ${italic}. ${when}.${safeDoi}`,
+          text: `${end(names)} ${work}. ${when}.${doi}`,
+          html: `${end(safeNames)} ${italic}. ${when}.${safeDoi}`,
         };
       }
 
       return {
-        text: `${names}. ${quotedWork}. ${when}.${doi}`,
-        html: `${safeNames}. ${escapeHtml(quotedWork)}. ${when}.${safeDoi}`,
+        text: `${end(names)} ${quotedWork}. ${when}.${doi}`,
+        html: `${end(safeNames)} ${escapeHtml(quotedWork)}. ${when}.${safeDoi}`,
       };
 
     case "ieee": {

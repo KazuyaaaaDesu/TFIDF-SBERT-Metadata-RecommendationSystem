@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useNerdButtons } from "../../state/nerdButtons";
+import { useSiteMode } from "../../state/siteMode";
 import {
-  comparePipelines,
+  comparePipelinesStream,
   webComparePipelines,
   type CompareResponse,
+  type Paper,
+  type SweepWeights,
 } from "../../api";
+import BattleJudge from "../../components/BattleJudge";
+import BattleDifferencesPanel from "../../components/BattleDifferences";
+import RecipeSweep from "../../components/RecipeSweep";
+import { LabDial, MixBar, TriangleLocator } from "../../components/LabMix";
+import RepositoryPickerDialog from "../../components/RepositoryPickerDialog";
 import { pipelineConfigs, adjustDialAllocation, normalizeDialPositions } from "../../data/pipelineConfigs";
 import { usePipelineMode } from "../../state/pipelineMode";
 import PixelProgress from "../../components/retro/PixelProgress";
@@ -15,6 +23,8 @@ import RetroDialog from "../../components/retro/RetroDialog";
 import StatsForNerds from "../../components/StatsForNerds";
 import { PageHeader } from "../../components/ui";
 import { ArrowRight } from "../../components/retro/PixelIcons";
+import ResponsiveLabel, { labelProps } from "../../components/ResponsiveLabel";
+import { FlaskConical, Radar, Sigma, Sprout } from "lucide-react";
 
 /* ============================================================
    LAB — the recipe workshop.
@@ -38,6 +48,10 @@ interface LabRun {
   winnerPipelineId: string;
   winnerValue: number;
   createdAt: string;
+  /** Whether the leader cleared the runner-up by the decisive margin.
+      Absent on runs saved before verdicts existed (counted separately). */
+  decisive?: boolean | null;
+  contenders?: string[];
 }
 
 const RECIPES_KEY = "paperrec_lab_recipes";
@@ -173,15 +187,30 @@ export default function Lab() {
 
 
 
-  const [tab, setTab] = useState<"recipe" | "garden">(
+  const [tab, setTab] = useState<"recipe" | "sweep" | "garden">(
     "recipe",
   );
+
+  /* The duel: a seed paper replaces the text query and is scored against
+     its own references; progress is real (pipelines finished so far). */
+  const [seedPaper, setSeedPaper] = useState<Paper | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [duelTab, setDuelTab] = useState<"results" | "differences" | "judge">("results");
+  const [progress, setProgress] = useState<{ order: string[]; finished: string[] }>({
+    order: [],
+    finished: [],
+  });
 
   const { setCustomWeights, setPipelineId } = usePipelineMode();
 
   /* Right-side Stats for Nerds pane: collapsible, and it traces the
      dial mix against a query you type here. */
-  const { on: nerdOn } = useNerdButtons();
+  // Outside Researcher mode the Lab is a beta: the recipe bench, the duel and
+  // the garden; no Sweep experiment and no Stats for Nerds.
+  const { mode: siteMode } = useSiteMode();
+  const beta = siteMode !== "researcher";
+  const { on: nerdSwitch } = useNerdButtons();
+  const nerdOn = nerdSwitch && !beta;
   const [statsOpenRaw, setStatsOpen] = useState<boolean>(() => {
     try {
       return window.localStorage.getItem("paperrec_lab_stats") === "1";
@@ -250,6 +279,12 @@ export default function Lab() {
     });
   }
 
+  /** Set the dials (and the shared custom weights) without switching pipeline. */
+  function applyMix(mix: { tfidf: number; sbert: number; metadata: number }) {
+    setDials({ ...mix });
+    setCustomWeights(normalizeDialPositions(mix));
+  }
+
   /** Load a mix into the dials and activate the custom pipeline. */
   function loadMix(mix: { tfidf: number; sbert: number; metadata: number }) {
     setDials({ ...mix });
@@ -290,15 +325,17 @@ export default function Lab() {
   }
 
   async function runBattle() {
-    if (!query.trim()) {
-      setError("Enter a query to start the simulation.");
+    const useSeed = Boolean(seedPaper && !webMode);
+
+    if (!useSeed && !query.trim()) {
+      setError("Enter a query or pick a seed paper to start the simulation.");
       return;
     }
 
     setLoading(true);
     setError(null);
-
-    const startedAt = Date.now();
+    setProgress({ order: [], finished: [] });
+    setDuelTab("results");
 
     battleAbortRef.current?.abort();
     const controller = new AbortController();
@@ -321,22 +358,29 @@ export default function Lab() {
             customWeights,
             signal: controller.signal,
           })
-        : await comparePipelines({
-            query: query.trim(),
-            topK,
-            customWeights,
-            mmrLambda: diversify ? diversifyLambda : undefined,
-            recordBattle: false,
-          });
+        : await comparePipelinesStream(
+            {
+              query: useSeed ? undefined : query.trim(),
+              seedPaperId: useSeed ? seedPaper!.id : undefined,
+              topK,
+              customWeights,
+              mmrLambda: diversify ? diversifyLambda : undefined,
+              recordBattle: false,
+            },
+            (event) => {
+              if (event.event === "start") {
+                setProgress({ order: event.pipelines, finished: [] });
+              } else if (event.event === "pipeline") {
+                setProgress((current) => ({
+                  ...current,
+                  finished: [...current.finished, event.id],
+                }));
+              }
+            },
+            controller.signal,
+          );
 
       if (controller.signal.aborted) return;
-
-      const elapsed = Date.now() - startedAt;
-      if (elapsed < 2400) {
-        await new Promise((resolve) =>
-          window.setTimeout(resolve, 2400 - elapsed),
-        );
-      }
 
       setBattle(data);
 
@@ -347,6 +391,8 @@ export default function Lab() {
           winnerPipelineId: data.winner.pipeline_id,
           winnerValue: data.winner.value,
           createdAt: new Date().toISOString(),
+          decisive: data.winner.decisive ?? null,
+          contenders: data.winner.contenders,
         };
         const next = [run, ...runs].slice(0, 60);
         setRuns(next);
@@ -370,7 +416,14 @@ export default function Lab() {
   // ------------------------------------------------------------
 
   const tally = new Map<string, number>();
+  const tooClose = runs.filter((run) => run.decisive === false).length;
+  const unscored = runs.filter((run) => run.decisive == null).length;
+  const decisiveCount = runs.length - tooClose - unscored;
+
   for (const run of runs) {
+    // Only decisive wins count: a leader inside the margin is a coin flip.
+    if (run.decisive !== true) continue;
+
     const key =
       run.winnerPipelineId === "custom"
         ? `custom:${run.recipeName}`
@@ -410,12 +463,25 @@ export default function Lab() {
 
   return (
     <div className="mx-auto flex w-full max-w-[1560px] items-start gap-4">
-      <div className="min-w-0 flex-1">
+      <div className="lab-sheet min-w-0 flex-1">
       <PageHeader
         eyebrow="Lab"
         title="Re:Search Laboratory"
-        description="Combine the three signals into your own recipe, then test it against the six presets. The Tree of Knowledge gives one piece of system trivia per question."
+        description={
+          beta
+            ? "Beta: combine the three signals into your own recipe and duel it against the six presets on one query or seed paper. The garden is here too. More experiments arrive after the beta."
+            : "Combine the three signals into your own recipe, duel it against the six presets on one query or seed paper, or sweep the whole blend triangle to see where quality lives. Experiments here are not saved to the Arena's log."
+        }
       />
+
+      <div className="mt-4" aria-hidden="true">
+        <div className="lab-hazard" />
+        <div className="lab-strip">
+          <span>{beta ? "Beta · early access" : "Experimental area"}</span>
+          <span>Notebook entry no. {String(runs.length + 1).padStart(3, "0")}</span>
+          <span>Results here are not recorded to the Arena</span>
+        </div>
+      </div>
 
       <div className="mt-5 flex" role="tablist" aria-label="Lab sections">
         <button
@@ -423,26 +489,44 @@ export default function Lab() {
           role="tab"
           aria-selected={tab === "recipe"}
           onClick={() => setTab("recipe")}
-          className={`rounded-l border-[3px] border-gray-900 px-3 py-1.5 text-sm font-semibold transition pixel-ease ${
+          {...labelProps("Re:Search Laboratory")}
+          className={`flex items-center justify-center rounded-l border-[3px] border-gray-900 px-3 py-1.5 text-sm font-semibold transition pixel-ease ${
             tab === "recipe"
               ? "bg-accent text-onAccent"
               : "bg-surface text-ink hover:bg-accentSoft"
           }`}
         >
-          Re:Search Laboratory
+          <ResponsiveLabel icon={FlaskConical}>Re:Search Laboratory</ResponsiveLabel>
         </button>
+        {!beta && (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "sweep"}
+          onClick={() => setTab("sweep")}
+          {...labelProps("Sweep")}
+          className={`-ml-[3px] flex items-center justify-center border-[3px] border-gray-900 px-3 py-1.5 text-sm font-semibold transition pixel-ease ${
+            tab === "sweep"
+              ? "bg-accent text-onAccent"
+              : "bg-surface text-ink hover:bg-accentSoft"
+          }`}
+        >
+          <ResponsiveLabel icon={Radar}>Sweep</ResponsiveLabel>
+        </button>
+        )}
         <button
           type="button"
           role="tab"
           aria-selected={tab === "garden"}
           onClick={() => setTab("garden")}
-          className={`-ml-[3px] rounded-r border-[3px] border-gray-900 px-3 py-1.5 text-sm font-semibold transition pixel-ease ${
+          {...labelProps("Garden")}
+          className={`-ml-[3px] flex items-center justify-center rounded-r border-[3px] border-gray-900 px-3 py-1.5 text-sm font-semibold transition pixel-ease ${
             tab === "garden"
               ? "bg-accent text-onAccent"
               : "bg-surface text-ink hover:bg-accentSoft"
           }`}
         >
-          Garden
+          <ResponsiveLabel icon={Sprout}>Garden</ResponsiveLabel>
         </button>
 
         {nerdOn && (
@@ -452,52 +536,46 @@ export default function Lab() {
           aria-pressed={statsOpen}
           onClick={() => setStatsOpen((value) => !value)}
           title="Toggle the live Stats for Nerds panel (traces the dial mix)"
-          className={`nerd-glitch-in ml-auto rounded border-[3px] border-gray-900 px-3 py-1.5 text-xs font-bold transition-colors pixel-ease ${
+          aria-label="Stats for Nerds"
+          className={`nerd-glitch-in ml-auto flex items-center gap-1 rounded border-[3px] border-gray-900 px-3 py-1.5 text-xs font-bold transition-colors pixel-ease ${
             statsOpen
               ? "bg-accent text-onAccent"
               : "bg-surface text-ink hover:bg-accentSoft"
           }`}
         >
-          Stats for Nerds {statsOpen ? "≫" : "≪"}
+          <ResponsiveLabel icon={Sigma}>Stats for Nerds</ResponsiveLabel>
+          <span aria-hidden="true">{statsOpen ? "≫" : "≪"}</span>
         </button>
         )}
       </div>
 
       {tab === "recipe" && (
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-7 grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)_340px]">
         {/* ================= RECIPE BENCH ================= */}
-        <section className="rounded border-[3px] border-gray-900 bg-white p-4">
-          <p className="mb-3 font-mono text-xs font-bold uppercase tracking-[0.15em] text-muted">
-            Recipe bench
-          </p>
+        <section className="lab-card">
+          <p className="lab-label lab-label--hot">Recipe bench</p>
 
           {(["tfidf", "sbert", "metadata"] as const).map((signal) => (
-            <div key={signal} className="mb-4">
-              <div className="mb-1 flex items-center justify-between">
-                <label
-                  htmlFor={`lab-${signal}`}
-                  className="filter-label !mb-0"
-                >
-                  {LABEL[signal]}
-                </label>
-                <span className="font-mono text-sm font-bold text-ink">
-                  {dials[signal]}%
-                </span>
-              </div>
-              <input
-                id={`lab-${signal}`}
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={dials[signal]}
-                onChange={(e) => setDial(signal, Number(e.target.value))}
-                className="w-full accent-[#f39c18]"
-              />
-            </div>
+            <LabDial
+              key={signal}
+              signal={signal}
+              value={dials[signal]}
+              onChange={(value) => setDial(signal, value)}
+            />
           ))}
 
-          <div className="rounded border-[2px] border-gray-900 bg-canvas p-3 font-mono text-xs leading-5 text-ink">
+          <div className="mb-3">
+            <p className="mb-1 font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-muted">
+              Blend
+            </p>
+            <MixBar mix={dials} />
+          </div>
+
+          <div className="flex items-stretch gap-3">
+          <div className="flex shrink-0 items-center">
+            <TriangleLocator mix={dials} onChange={applyMix} width={116} />
+          </div>
+          <div className="min-w-0 flex-1 rounded-sm border-[2px] border-dashed border-gray-900 bg-canvas p-2.5 font-mono text-[11px] leading-5 text-ink">
             <p className="font-bold text-accent">S(d) =</p>
             <p className="mt-1">
               {normalized.tfidf / 100} · s'_tfidf(d)
@@ -512,6 +590,7 @@ export default function Lab() {
                 </>
               )}
             </p>
+          </div>
           </div>
 
           {/* Experimental — extra knobs beyond the three signals */}
@@ -545,7 +624,7 @@ export default function Lab() {
                   setDiversifyLambda(Number(event.target.value))
                 }
                 aria-label="MMR lambda"
-                className="min-w-0 flex-1 accent-[#f39c18] disabled:opacity-40"
+                className="min-w-0 flex-1 disabled:opacity-40"
               />
               <span className="w-8 shrink-0 text-right font-bold text-ink">
                 {diversifyLambda.toFixed(2)}
@@ -628,7 +707,8 @@ export default function Lab() {
 
         {/* ================= BATTLE SIM ================= */}
         <section className="flex flex-col gap-4">
-          <div className="rounded border-[3px] border-gray-900 bg-white p-4">
+          <div className="lab-card">
+            <p className="lab-label lab-label--hot">Duel</p>
             {/* Repository / Web scope switcher */}
             <div className="mb-3 flex items-center gap-2">
               {(["repository", "web"] as const).map((scope) => (
@@ -670,6 +750,46 @@ export default function Lab() {
               className="ui-input text-base"
             />
 
+            {!webMode && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em]">Seed paper</span>
+                {seedPaper ? (
+                  <>
+                    <span className="min-w-0 max-w-full truncate rounded border-[2px] border-gray-900 bg-canvas px-2 py-0.5 text-ink">
+                      {seedPaper.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSeedPaper(null)}
+                      className="rounded border-[2px] border-gray-900 bg-white px-1.5 py-0.5 font-bold text-ink hover:bg-accentSoft"
+                    >
+                      Clear
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    className="rounded border-[2px] border-gray-900 bg-white px-1.5 py-0.5 font-bold text-ink hover:bg-accentSoft"
+                  >
+                    Pick from repository
+                  </button>
+                )}
+                <span>
+                  {seedPaper
+                    ? "Scored against its own references (Judge tab)."
+                    : "Optional: your recipe is then scored on real quality."}
+                </span>
+              </div>
+            )}
+            <RepositoryPickerDialog
+              open={pickerOpen}
+              onClose={() => setPickerOpen(false)}
+              onPick={(paper) => {
+                setSeedPaper(paper);
+                setPickerOpen(false);
+              }}
+            />
             {webMode && (
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
                 <div className="flex items-center gap-2.5">
@@ -677,7 +797,7 @@ export default function Lab() {
                     Sources
                   </span>
 
-                  {(["openalex", "crossref", "arxiv"] as const).map(
+                  {(["openalex", "crossref", "arxiv", "doaj"] as const).map(
                     (source) => (
                       <label
                         key={source}
@@ -698,13 +818,15 @@ export default function Lab() {
                                     .join(",")
                             )
                           }
-                          className="accent-gold"
+                          className=""
                         />
                         {source === "openalex"
                           ? "OpenAlex"
                           : source === "crossref"
                             ? "Crossref"
-                            : "arXiv"}
+                            : source === "doaj"
+                              ? "DOAJ"
+                              : "arXiv"}
                       </label>
                     ),
                   )}
@@ -715,7 +837,7 @@ export default function Lab() {
                     type="checkbox"
                     checked={openAccess}
                     onChange={(e) => setOpenAccess(e.target.checked)}
-                    className="accent-gold"
+                    className=""
                   />
                   Open access only
                 </label>
@@ -755,7 +877,7 @@ export default function Lab() {
             <button
               type="button"
               onClick={() => void runBattle()}
-              disabled={loading || !query.trim()}
+              disabled={loading || !(query.trim() || (seedPaper && !webMode))}
               className="mt-4 w-full rounded border-[3px] border-gray-900 bg-accent px-4 py-2.5 text-sm font-semibold text-onAccent hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Simulating battle…" : "Simulate battle"}
@@ -763,27 +885,74 @@ export default function Lab() {
           </div>
 
           {loading && (
-            <div className="rounded border-[3px] border-gray-900 bg-white p-4">
+            <div className="lab-card">
               <PixelProgress
-                value={null}
-                stage="RUNNING 7 PIPELINES"
+                value={
+                  webMode || progress.order.length === 0
+                    ? null
+                    : progress.finished.length / progress.order.length
+                }
+                stage={
+                  webMode || progress.order.length === 0
+                    ? "RUNNING 7 PIPELINES"
+                    : `${progress.finished.length} OF ${progress.order.length} PIPELINES DONE`
+                }
               />
+              {progress.finished.length > 0 && (
+                <p className="mt-2 font-mono text-[10px] text-muted">
+                  Done: {progress.finished.map((id) => pipelineLabel(id)).join(" · ")}
+                </p>
+              )}
             </div>
           )}
 
           {error && <div className="status-error">{error}</div>}
 
+          {!battle && !loading && !error && (
+            <div className="lab-card lab-card--flat">
+              <p className="lab-label">Specimen tray</p>
+              <p className="text-xs leading-5 text-muted">
+                A duel puts your recipe and the six presets side by side. Each takes a slot; the results fill them in.
+              </p>
+              <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[...pipelineConfigs.map((config) => config.codename), "Your recipe"].map((name, index) => (
+                  <li
+                    key={name}
+                    className={`mx-auto flex aspect-square w-full max-w-[112px] flex-col items-center justify-center rounded-full border-2 border-dashed px-2 text-center font-mono text-[10px] font-bold uppercase tracking-[0.1em] ${
+                      index === pipelineConfigs.length
+                        ? "border-gray-900 bg-accentSoft text-ink"
+                        : "border-gray-900/40 text-muted"
+                    }`}
+                  >
+                    <span className="text-[9px] opacity-60">{String(index + 1).padStart(2, "0")}</span>
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {battle && !loading && (
             <>
               {battle.winner && (
-                <div className="rounded border-[3px] border-gray-900 bg-gray-900 p-4 text-onInk">
+                <div className="lab-card lab-card--ink">
+                  <p className="lab-label lab-label--hot">Result</p>
                   <p className="animate-blink flex items-center gap-2 font-mono text-xs font-bold tracking-[0.3em] text-accent">
                     <ArrowRight className="h-3 w-3" />
-                    WINNER
+                    {battle.winner.decisive === false
+                      ? "TOO CLOSE TO CALL"
+                      : "CONSENSUS LEADER"}
                   </p>
                   <p className="mt-2 font-mono text-sm font-bold tracking-[0.12em] text-onInk">
                     {pipelineLabel(battle.winner.pipeline_id)}
                   </p>
+                  {battle.winner.decisive === false && (
+                    <p className="mt-1 text-xs font-bold text-accent">
+                      {(battle.winner.contenders ?? []).map(pipelineLabel).join(" · ")} are within{" "}
+                      {Math.round((battle.winner.min_margin ?? 0.02) * 100)} points of each other. The name above is
+                      only the nominal leader.
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-onInk/70">
                     {(battle.winner.value * 100).toFixed(0)}% of
                     available consensus · avg consensus rank #
@@ -792,10 +961,37 @@ export default function Lab() {
                 </div>
               )}
 
-              <div className="rounded border-[3px] border-gray-900 bg-white p-4">
-                <p className="mb-3 font-mono text-xs font-bold uppercase tracking-[0.15em] text-muted">
-                  Results
-                </p>
+              <div role="tablist" aria-label="Duel results" className="flex gap-1.5">
+                {(
+                  [
+                    ["results", "Results"],
+                    ["differences", "Why they differ"],
+                    ["judge", "Judge"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={duelTab === id}
+                    onClick={() => setDuelTab(id)}
+                    className={`rounded border-[2px] border-gray-900 px-2.5 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] ${
+                      duelTab === id ? "bg-accent text-onAccent" : "bg-surface text-ink hover:bg-accentSoft"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {duelTab === "differences" && (
+                <BattleDifferencesPanel differences={battle.differences} name={pipelineLabel} />
+              )}
+              {duelTab === "judge" && (
+                <BattleJudge key={`${battle.query}-${battle.seed_paper_id}-${battle.pipelines.length}-${runs.length}`} battle={battle} name={pipelineLabel} />
+              )}
+              {duelTab === "results" && (
+              <div className="lab-card">
+                <p className="lab-label">Specimens</p>
                 <ul className="space-y-2">
                   {battle.pipelines.map((pipeline) => {
                     const isCustom = pipeline.id === "custom";
@@ -831,15 +1027,14 @@ export default function Lab() {
                   })}
                 </ul>
               </div>
+              )}
             </>
           )}
         </section>
 
         {/* ================= LEADERBOARD ================= */}
-        <section className="rounded border-[3px] border-gray-900 bg-white p-4">
-          <p className="mb-3 font-mono text-xs font-bold uppercase tracking-[0.15em] text-muted">
-            Leaderboard
-          </p>
+        <section className="lab-card">
+          <p className="lab-label">Logbook</p>
 
           {runs.length === 0 ? (
             <p className="text-sm leading-6 text-muted">
@@ -848,6 +1043,15 @@ export default function Lab() {
             </p>
           ) : (
             <>
+              <p className="mb-2 text-[11px] leading-4 text-muted">
+                Counts decisive wins only: {decisiveCount} decisive, {tooClose} too close to call
+                {unscored > 0 ? `, ${unscored} older runs without a margin` : ""}.
+              </p>
+              {tallyRows.length === 0 && (
+                <p className="text-sm leading-6 text-muted">
+                  No decisive winner yet. Every battle so far was within the margin.
+                </p>
+              )}
               <ol className="divide-y divide-gray-200">
                 {tallyRows.map((row, index) => (
                   <li
@@ -869,7 +1073,7 @@ export default function Lab() {
                     )}
                     <span className="shrink-0 font-mono text-xs text-muted">
                       {row.wins} win{row.wins === 1 ? "" : "s"} ·{" "}
-                      {Math.round((row.wins / runs.length) * 100)}%
+                      {Math.round((row.wins / Math.max(1, decisiveCount)) * 100)}%
                     </span>
                   </li>
                 ))}
@@ -899,6 +1103,9 @@ export default function Lab() {
                     className="flex items-center justify-between gap-2 text-xs"
                   >
                     <span className="truncate font-mono text-muted">
+                      {run.decisive === false
+                        ? "Too close · "
+                        : ""}
                       {run.winnerPipelineId === "custom"
                         ? run.recipeName
                         : tallyLabel(run.winnerPipelineId)}
@@ -931,12 +1138,25 @@ export default function Lab() {
       </div>
       )}
 
+      {!beta && tab === "sweep" && (
+        <div className="mt-6">
+          <RecipeSweep
+            presetName={(id) => pipelineConfigs.find((c) => c.id === id)?.codename ?? id}
+            onLoad={(weights: SweepWeights) => {
+              setRecipeName(`Sweep ${weights.tfidf}/${weights.sbert}/${weights.metadata}`);
+              loadMix(weights);
+              setTab("recipe");
+            }}
+          />
+        </div>
+      )}
+
       {tab === "garden" && (
         <div ref={gardenPanelRef} className="mt-6">
           {gardenNarrow && (
             <div
               role="status"
-              className="mb-4 flex items-start gap-2 rounded-lg border-[3px] border-[#b45309]/60 bg-[#fff7e6] px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wide text-[#7a4a10]"
+              className="mb-4 flex items-start gap-2 rounded-lg border-[3px] border-gray-900 bg-accentSoft px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wide text-ink"
             >
               <span aria-hidden="true">{"\u26A0"}</span>
               <span>
@@ -953,7 +1173,7 @@ export default function Lab() {
                 The Garden
               </p>
               <p className="mt-1 max-w-xl text-xs leading-5 text-muted">
-                The tree carries its own wooden menu: Shop opens the sun
+                The tree carries its own carved menu (six frames to choose from): Shop opens the sun
                 shop, the skins and the themes, and the Almanac holds
                 its charms (parts of the garden it unlocks as it grows),
                 the scenery switches and how to earn sun. Three thousand
@@ -961,10 +1181,10 @@ export default function Lab() {
               </p>
             </div>
             <div
-              className="flex items-center gap-1.5 rounded-lg border-[3px] border-[#8a5a2b]/45 bg-[#fffdf5] px-2.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider text-[#6b4c1f] shadow-[2px_2px_0_rgba(0,0,0,0.06)]"
+              className="flex items-center gap-1.5 rounded-lg border-[3px] border-gray-900 bg-surface px-2.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider text-ink shadow-[2px_2px_0_rgba(0,0,0,0.12)]"
               title="Three thousand packets take the tree from seed to ancient maple"
             >
-              <span aria-hidden="true" className="text-[#8a5a2b]">
+              <span aria-hidden="true" className="text-accent">
                 {"\u25CF"}
               </span>
               3,000 packets

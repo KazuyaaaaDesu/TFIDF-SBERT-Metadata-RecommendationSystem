@@ -1,5 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import StaggerIn from "../components/retro/StaggerIn";
+import "./faq.css";
+
+const TOPICS = ["Basics", "Finding papers", "Your library", "Account"] as const;
+type Topic = (typeof TOPICS)[number];
+const TOPIC_OF: Topic[] = ["Basics", "Finding papers", "Finding papers", "Finding papers", "Your library", "Your library", "Account"];
 
 const faqs = [
   {
@@ -39,20 +44,58 @@ const faqs = [
   },
 ];
 
+function useWide() {
+  const query = "(min-width: 1024px)";
+  const [wide, setWide] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setWide(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return wide;
+}
+
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [topic, setTopic] = useState<Topic | "All">("All");
+  const [query, setQuery] = useState("");
+  const wide = useWide();
 
   function toggleFAQ(index: number) {
+    if (wide) {
+      setOpenIndex(index);
+      return;
+    }
     setOpenIndex(openIndex === index ? null : index);
   }
 
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return faqs
+      .map((faq, index) => ({ faq, index, topic: TOPIC_OF[index] }))
+      .filter(
+        (row) =>
+          (topic === "All" || row.topic === topic) &&
+          (!q || `${row.faq.question} ${row.faq.answer}`.toLowerCase().includes(q)),
+      );
+  }, [topic, query]);
+
+  const selected = wide
+    ? visible.find((r) => r.index === openIndex) ?? visible[0] ?? null
+    : null;
+  const groups = TOPICS.map((t) => ({
+    topic: t,
+    rows: visible.filter((r) => r.topic === t),
+  })).filter((g) => g.rows.length > 0);
+
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="faq-page mx-auto max-w-6xl">
       {/* Header */}
-      <div className="mb-8">
-        <p className="text-sm font-bold text-muted">
-          Help Center
-        </p>
+      <div className="mb-6">
+        <p className="text-sm font-bold text-muted">Help Center</p>
 
         <h1 className="font-pixelify mt-2 text-3xl font-bold leading-none text-ink">
           Frequently Asked Questions
@@ -64,43 +107,93 @@ export default function FAQ() {
         </p>
       </div>
 
-      {/* FAQ List */}
-      <div className="space-y-3">
-        {faqs.map((faq, index) => {
-          const isOpen = openIndex === index;
-
-          return (
-            <StaggerIn key={faq.question} index={index} className="overflow-hidden rounded border-[3px] border-gray-900 bg-white">
+      <div className="faq-desk">
+        <aside className="faq-list">
+          <div className="faq-search">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search questions"
+              aria-label="Search questions"
+              className="faq-search-input"
+            />
+          </div>
+          <div className="faq-chips" role="group" aria-label="Topics">
+            {(["All", ...TOPICS] as const).map((t) => (
               <button
+                key={t}
                 type="button"
-                onClick={() => toggleFAQ(index)}
-                className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition pixel-ease hover:bg-accentSoft"
+                aria-pressed={topic === t}
+                onClick={() => setTopic(t)}
+                className="faq-chip"
               >
-                <span className="text-sm font-bold text-ink">
-                  {faq.question}
-                </span>
-
-                <span
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[3px] border-gray-900 bg-white text-sm font-bold text-ink transition-transform pixel-ease ${
-                    isOpen ? "rotate-45" : ""
-                  }`}
-                >
-                  +
-                </span>
+                {t}
               </button>
+            ))}
+          </div>
 
-              {isOpen && (
-                <div className="border-t border-gray-200 px-5 py-4">
-                  <p className="text-sm leading-6 text-muted">{faq.answer}</p>
-                </div>
-              )}
-            </StaggerIn>
-          );
-        })}
+          {groups.length === 0 && (
+            <p className="faq-empty">No questions match.</p>
+          )}
+
+          {groups.map((g) => (
+            <section key={g.topic} className="faq-group">
+              <h2 className="faq-group-title">{g.topic}</h2>
+              <ul>
+                {g.rows.map(({ faq, index }, i) => {
+                  const isOpen = wide ? selected?.index === index : openIndex === index;
+                  return (
+                    <li key={faq.question}>
+                      <StaggerIn index={i}>
+                        <div className="faq-ticket" data-open={isOpen}>
+                        <button
+                          type="button"
+                          onClick={() => toggleFAQ(index)}
+                          aria-expanded={isOpen}
+                          className="faq-row"
+                        >
+                          <span className="faq-badge">{String(index + 1).padStart(2, "0")}</span>
+                          <span className="faq-q">{faq.question}</span>
+                          <span className="faq-plus" aria-hidden="true">+</span>
+                        </button>
+                        {!wide && isOpen && (
+                          <div className="faq-inline">
+                            <p className="text-sm leading-6 text-muted">{faq.answer}</p>
+                          </div>
+                        )}
+                        </div>
+                      </StaggerIn>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
+        </aside>
+
+        {wide && (
+          <article className="faq-sheet" aria-live="polite">
+            {selected ? (
+              <>
+                <p className="faq-sheet-meta">
+                  Help sheet no. {String(selected.index + 1).padStart(2, "0")} · {selected.topic}
+                </p>
+                <h2 className="faq-sheet-title">{selected.faq.question}</h2>
+                <p className="faq-sheet-body">{selected.faq.answer}</p>
+                <p className="faq-sheet-foot">
+                  Still stuck? Use the System Tutorial from the account menu.
+                </p>
+              </>
+            ) : (
+              <p className="faq-empty">Pick a question to read its answer.</p>
+            )}
+          </article>
+        )}
       </div>
 
       {/* Bottom note */}
-      <div className="mt-8 rounded border-[3px] border-dashed border-gray-900 bg-canvas p-5">
+      <div className="faq-note mt-8">
         <p className="text-sm font-medium text-ink">Need more help?</p>
 
         <p className="mt-1 text-sm leading-5 text-muted">

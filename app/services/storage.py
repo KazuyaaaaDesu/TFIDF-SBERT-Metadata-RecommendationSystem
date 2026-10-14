@@ -16,6 +16,18 @@ extension:
 The database stores only the relative path:
 
     papers/3.pdf
+
+Research exports are written next to them:
+
+    project_root/storage/exports/
+
+    storage/exports/battle_runs-20261009-142501.jsonl
+
+That directory holds data the study cannot regenerate -- the Arena's
+recorded runs, each carrying the consensus and pairwise structure as
+it was computed on the day -- so it is never cleared programmatically.
+Archiving the Arena writes a new file there and leaves every earlier
+one alone.
 """
 
 from pathlib import Path
@@ -36,6 +48,11 @@ STORAGE_ROOT = BASE_DIR / "storage"
 # Correct papers directory
 PAPERS_DIR = STORAGE_ROOT / "papers"
 
+# Research exports (battle archives, dataset bundles). Created on
+# demand rather than at startup, for the same reason storage/papers/
+# is: an empty directory in git is not evidence of anything.
+EXPORTS_DIR = STORAGE_ROOT / "exports"
+
 ALLOWED_EXTENSIONS = {".pdf", ".bib", ".tex", ".ris", ".enw"}
 
 
@@ -44,6 +61,21 @@ def ensure_storage_ready() -> None:
     Create storage/papers/ if it does not exist.
     """
     PAPERS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def exports_dir() -> Path:
+    """
+    Create storage/exports/ if it does not exist and return it.
+
+    A function rather than a constant because it is called from the
+    archiving route, which must never fail on a fresh checkout: the
+    archive is the step that saves the history, so a missing directory
+    is created at the moment it is needed instead of at startup.
+    """
+
+    EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    return EXPORTS_DIR
 
 
 def save_paper_file(paper_id: int, source_path: str) -> str:

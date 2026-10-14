@@ -21,6 +21,7 @@ import {
 } from "../data/pipelineConfigs";
 import { usePipelineMode } from "../state/pipelineMode";
 import WeightBar from "./WeightBar";
+import { LabDial, MixBar, TriangleLocator } from "./LabMix";
 
 interface AlgorithmConsoleProps {
   /** True while the Recommend scope is active (Top-K + Diversify). */
@@ -86,55 +87,38 @@ function DialPopover({
     <div
       ref={popoverRef}
       role="dialog"
-      aria-label="Custom algorithm dials"
-      className="absolute right-0 top-full z-20 mt-2 w-[300px] max-w-[calc(100vw-2rem)] rounded border-[3px] border-gray-900 bg-white p-4 shadow-[4px_4px_0_rgba(0,0,0,0.2)]"
+      aria-label="Custom algorithm blend"
+      className="absolute right-0 top-full z-20 mt-3 w-[340px] max-w-[calc(100vw-2rem)]"
     >
-      <p className="mb-3 font-mono text-xs font-bold uppercase tracking-[0.15em] text-muted">
-        Custom mix — dials
-      </p>
+      <div className="lab-card">
+        <p className="lab-label lab-label--hot">Custom blend</p>
 
-      {(
-        [
-          ["tfidf", "TF-IDF"],
-          ["sbert", "S-BERT"],
-          ["metadata", "Metadata"],
-        ] as const
-      ).map(([key, label]) => (
-        <div key={key} className="mb-4 last:mb-3">
-          <div className="mb-1 flex items-center justify-between">
-            <label
-              htmlFor={`algorithm-dial-${key}`}
-              className="font-pixelify text-[13px] font-bold text-ink"
-            >
-              {label}
-            </label>
-            <span className="font-mono text-xs font-bold text-ink">
-              {customWeights[key]}%
-            </span>
-          </div>
-          <input
-            id={`algorithm-dial-${key}`}
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={customWeights[key]}
-            onChange={(event) =>
-              setDial(key, Number(event.target.value))
-            }
-            className="w-full accent-[#f39c18]"
+        <div className="mb-3 flex items-center gap-3">
+          <TriangleLocator
+            mix={customWeights}
+            width={132}
+            onChange={(mix) => setCustomWeights(mix)}
           />
+          <p className="text-[11px] leading-4 text-muted">
+            Drag the dot toward a corner to lean on that signal, or use the dials below.
+          </p>
         </div>
-      ))}
 
-      <p className="rounded border-[2px] border-gray-900 bg-canvas p-2 font-mono text-[11px] leading-5 text-ink">
-        <span className="font-bold text-accent">S(d) =</span>{" "}
-        {formulaTerms.join(" + ")}
-      </p>
-      <p className="mt-1.5 text-[11px] leading-4 text-muted">
-        Dials normalize to 100% as they move; on a tie the leftover
-        goes to Metadata.
-      </p>
+        <div className="mb-3">
+          <MixBar mix={customWeights} />
+        </div>
+
+        {(["tfidf", "sbert", "metadata"] as const).map((key) => (
+          <LabDial key={key} signal={key} value={customWeights[key]} onChange={(value) => setDial(key, value)} />
+        ))}
+
+        <p className="rounded-sm border-[2px] border-dashed border-gray-900 bg-canvas p-2 font-mono text-[11px] leading-5 text-ink">
+          <span className="font-bold text-accent">S(d) =</span> {formulaTerms.join(" + ")}
+        </p>
+        <p className="mt-1.5 text-[11px] leading-4 text-muted">
+          Dials normalize to 100% as they move; on a tie the leftover goes to Metadata.
+        </p>
+      </div>
     </div>
   );
 }

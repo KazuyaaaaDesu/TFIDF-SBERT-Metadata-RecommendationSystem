@@ -539,7 +539,7 @@ const ASCENT_START = 0.46;
    ornament. */
 const SPECIES_HAZE: Record<
   TreeSpeciesId,
-  { colors: number[][]; shape: "star" | "lobed" | "oval" | "leaf" | "needle" }
+  { colors: number[][]; shape: "star" | "lobed" | "oval" | "leaf" | "needle" | "heart" | "petal" }
 > = {
   crimson: {
     colors: [[196, 42, 28], [227, 122, 30], [242, 197, 88]],
@@ -560,6 +560,14 @@ const SPECIES_HAZE: Record<
   redwood: {
     colors: [[60, 110, 70], [40, 80, 55]],
     shape: "needle",
+  },
+  beanstalk: {
+    colors: [[92, 194, 58], [182, 240, 106]],
+    shape: "heart",
+  },
+  rosevine: {
+    colors: [[216, 31, 91], [255, 143, 180]],
+    shape: "petal",
   },
 };
 
@@ -603,6 +611,17 @@ function stampHazeLeaf(
       put(xi, yi - 1, c1);
       put(xi, yi, c0);
       put(xi, yi + 1, c1);
+      break;
+    case "heart":
+      /* beanstalk: a broad leaf, two pixels wide with a stem fleck */
+      put(xi, yi, c0);
+      put(xi + sx, yi, c0);
+      put(xi, yi + 1, c1);
+      break;
+    case "petal":
+      /* rose: a small curled petal, a bright speck over a dark one */
+      put(xi, yi, c1);
+      put(xi + sx, yi + 1, c0);
       break;
     default:
       /* elm: a simple diagonal pair */

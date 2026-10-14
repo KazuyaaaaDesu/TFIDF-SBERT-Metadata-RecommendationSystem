@@ -108,6 +108,51 @@ class SurnamesTest(unittest.TestCase):
         self.assertEqual(surnames("  "), [])
 
 
+class StructuredAuthorsTest(unittest.TestCase):
+    """A repository paper carries given / middle / family parts and the
+    styles use those, not a re-parse of the display string."""
+
+    PAPER = Rec(
+        author="Whatever Display String",
+        authors=[
+            {"given": "Ada", "middle": "Augusta", "family": "King", "suffix": ""},
+            {"given": "Martin", "middle": "Luther", "family": "King", "suffix": "Jr."},
+        ],
+        year=1843, title="Notes on the analytical engine", doi=None,
+        document_type="Journal Article",
+    )
+
+    def test_parts_win_over_the_display_string(self):
+        self.assertEqual(
+            reference_entry("apa", self.PAPER, False),
+            "King, A. A., & King, M. L. Jr. (1843). Notes on the analytical engine.",
+        )
+        self.assertEqual(
+            reference_entry("ieee", self.PAPER, False, number=1),
+            '[1] A. A. King and M. L. King, Jr., "Notes on the analytical engine," 1843.',
+        )
+        self.assertEqual(
+            reference_entry("mla", self.PAPER, False),
+            'King, Ada Augusta, and Martin Luther King Jr. "Notes on the analytical engine". 1843.',
+        )
+
+    def test_in_text_uses_family_names(self):
+        out = apply_style("Engine [1].", [self.PAPER], "apa")
+        self.assertIn("Engine (King & King, 1843).", out)
+
+    def test_object_parts_and_empty_parts_fall_back(self):
+        obj = Rec(
+            author="Jane Doe",
+            authors=[Rec(given="Jane", middle="Q.", family="Doe", suffix="")],
+            year=2000, title="T", doi=None, document_type=None,
+        )
+        self.assertIn("Doe, J. Q.", reference_entry("apa", obj, False))
+
+        bare = Rec(author="Jane Doe", authors=[], year=2000, title="T",
+                   doi=None, document_type=None)
+        self.assertIn("Doe, J.", reference_entry("apa", bare, False))
+
+
 class StandaloneWorkTest(unittest.TestCase):
     def test_mirrors_the_frontend_rule(self):
         for kind in ("Thesis", "PhD dissertation", "Technical Report", "Book Chapter"):
@@ -122,7 +167,7 @@ class ReferenceEntryTest(unittest.TestCase):
     def test_apa(self):
         self.assertEqual(
             reference_entry("apa", YAO, True),
-            "Bohao Yao and Charl Ras and Hamid Mokhtar (2015). "
+            "Yao, B., Ras, C., & Mokhtar, H. (2015). "
             "An algorithm for finding Hamiltonian Cycles in Cubic Planar "
             "Graphs. https://doi.org/10.1/yao",
         )
@@ -130,7 +175,7 @@ class ReferenceEntryTest(unittest.TestCase):
     def test_mla_journal_article_quotes_the_title(self):
         self.assertEqual(
             reference_entry("mla", YAO, True),
-            'Bohao Yao and Charl Ras and Hamid Mokhtar. "An algorithm for '
+            'Yao, Bohao, et al. "An algorithm for '
             'finding Hamiltonian Cycles in Cubic Planar Graphs". 2015. '
             "DOI: 10.1/yao.",
         )
@@ -140,7 +185,7 @@ class ReferenceEntryTest(unittest.TestCase):
 
         self.assertEqual(
             reference_entry("mla", book, True),
-            "Bohao Yao and Charl Ras and Hamid Mokhtar. An algorithm for "
+            "Yao, Bohao, et al. An algorithm for "
             "finding Hamiltonian Cycles in Cubic Planar Graphs. 2015.",
         )
 
@@ -154,20 +199,34 @@ class ReferenceEntryTest(unittest.TestCase):
     def test_ieee_is_numbered(self):
         self.assertEqual(
             reference_entry("ieee", KARAASLAN, True, number=3),
-            "[3] Karaaslan, Hatice and Kılıç, Nurseven, "
+            "[3] H. Karaaslan and N. Kılıç, "
             '"Students\' attitudes towards blended language courses," 2019.',
         )
 
-    def test_very_long_author_lists_are_cut_to_ten_plus_et_al(self):
-        many = Rec(
-            author="; ".join(f"Given{i} Family{i}" for i in range(1, 16)),
-            year=2020, title="Big collaboration", doi=None, document_type=None,
-        )
+    def test_each_style_applies_its_own_et_al_rule(self):
+        def many(count):
+            return Rec(
+                author="; ".join(f"Given{i} Family{i}" for i in range(1, count + 1)),
+                year=2020, title="Big collaboration", doi=None, document_type=None,
+            )
 
-        entry = reference_entry("apa", many, True)
+        # APA 7 lists up to 20, then ". . ." and the last author.
+        apa = reference_entry("apa", many(25), True)
+        self.assertIn("Family19, G., . . . Family25, G. (2020).", apa)
+        self.assertNotIn("Family20", apa)
+        self.assertIn("& Family15, G. (2020)", reference_entry("apa", many(15), True))
 
-        self.assertIn("Given10 Family10 et al. (2020).", entry)
-        self.assertNotIn("Family11", entry)
+        # IEEE: more than six authors -> first author et al.
+        self.assertIn("G. Family1 et al.,", reference_entry("ieee", many(7), True))
+
+        # MLA: three or more -> first author et al.
+        self.assertIn("Family1, Given1, et al.", reference_entry("mla", many(3), True))
+
+        # Chicago: more than ten -> first seven et al.
+        chi = reference_entry("chicago", many(12), True)
+        self.assertIn("Family7", chi)
+        self.assertNotIn("Family8", chi)
+        self.assertIn("et al.", chi)
 
     def test_ten_authors_or_fewer_are_listed_in_full(self):
         ten = Rec(
@@ -207,7 +266,7 @@ class ApplyStyleTest(unittest.TestCase):
         lines = refs.splitlines()
         self.assertEqual(len(lines), 2)
         self.assertTrue(lines[0].startswith("Karaaslan"))
-        self.assertTrue(lines[1].startswith("Bohao Yao"))
+        self.assertTrue(lines[1].startswith("Yao, B."))
 
     def test_apa_merges_adjacent_citations_alphabetically(self):
         for raw in ("[1][2]", "[1] [2]", "[1, 2]", "[2][1]"):
@@ -252,8 +311,8 @@ class ApplyStyleTest(unittest.TestCase):
         body, _, refs = out.partition("\n\nReferences\n")
         self.assertEqual(body, "B first [1], then A [2], B again [1].")
         lines = refs.splitlines()
-        self.assertTrue(lines[0].startswith("[1] Karaaslan"))
-        self.assertTrue(lines[1].startswith("[2] Bohao Yao"))
+        self.assertTrue(lines[0].startswith("[1] H. Karaaslan"))
+        self.assertTrue(lines[1].startswith("[2] B. Yao"))
 
     def test_ieee_adjacent_citations_are_listed_separately(self):
         out = apply_style("Both [1][2].", [YAO, KARAASLAN], "ieee")

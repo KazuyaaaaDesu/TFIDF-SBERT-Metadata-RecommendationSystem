@@ -3,38 +3,56 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   Database,
   Globe,
+  Maximize2,
   SlidersHorizontal,
   Search as SearchIcon,
+  Sigma,
   Table,
 } from "lucide-react";
+import ResponsiveLabel from "../../components/ResponsiveLabel";
 import {
   listPapers,
   saveToLibrary,
   removeFromLibrary,
   deletePaper,
   deletePaperPdf,
-  getPaperPdfUrl,
   getLibrary,
+  getSyncStatus,
   rebuildRecommendationIndex,
+  startSync,
+  type SyncJob,
   searchWeb,
   importPaperFromMetadata,
   getRecommendations,
   getWebRecommendations,
+  getPaper,
   notifyRecommendationIndexStale,
   Paper,
   SearchResult,
   WebSearchResult,
 } from "../../api";
 import PaperViewerModal from "../../components/PaperViewerModal";
-import FindPdfPanel from "../../components/FindPdfPanel";
 import MathText from "../../components/MathText";
 import PetFigure from "../../components/PetFigure";
 import LayoutOptions from "../../components/LayoutOptions";
 import StaggerIn from "../../components/retro/StaggerIn";
 import Pagination from "../../components/retro/Pagination";
 import PaneHandle, { usePaneWidth } from "../../components/ResizeHandle";
+import { accession, spineColor } from "../../utils/catalogue.ts";
+import "./repository.css";
 import Highlight from "../../components/Highlight";
+import WebSimilarPanel from "../../components/WebSimilarPanel";
 import ConnectionsPane from "../../components/ConnectionsPane";
+import ConnectionsWorkbench from "../../components/ConnectionsWorkbench";
+import InspectorPopup, {
+  INSPECTOR_TABS,
+  type InspectorTab,
+} from "../../components/InspectorPopup";
+import {
+  PaperDetailsBody,
+  PaperNotesBody,
+  PaperPdfBody,
+} from "../../components/InspectorBodies";
 import LiteratureMenu from "../../components/LiteratureMenu";
 import RepoStatsPane from "../../components/RepoStatsPane";
 import AlgorithmConsole from "../../components/AlgorithmConsole";
@@ -59,16 +77,21 @@ import { useCatalog } from "../../hooks/useCatalog";
 import { useLayoutPrefs } from "../../state/layoutPrefs";
 import { useNerdButtons } from "../../state/nerdButtons";
 import { useSiteMode } from "../../state/siteMode";
+import { useSun } from "../../state/sun";
 import { useLongPressFeed } from "../../utils/longPress";
 import { useStatsDrawer } from "../../state/statsDrawer";
 import { triggerSlimeAnimation } from "../../utils/slimeEvents";
+import {
+  blendRecommendations,
+  seedWebQuery,
+  type BlendRow,
+} from "../../utils/blendRecommendations";
 
 function categoryOf(paper: Paper) {
   const parts = paper.subject_category?.split(":", 2).map((p) => p.trim());
   return { subject: parts?.[0] ?? "", category: parts?.[1] ?? "" };
 }
 
-const SIGNAL_FIELDS = ["title", "abstract", "keywords", "publication_year"] as const;
 
 /* Resizable pane bounds (persisted per browser). */
 const REPO_LEFT_KEY = "paperrec_repo_pane_left";
@@ -83,15 +106,25 @@ type SearchMode = "repository" | "web" | "recommend";
 /** MMR lambda used by the Diversify toggle (matches the Search page). */
 const MMR_LAMBDA = 0.7;
 
+/** Per-browser preference for blending web hits into Recommend. */
+const BLEND_WEB_KEY = "paperrec_repo_blend_web";
+
 /** Stable identity for a web hit (dedupe across repeat searches). */
 function webKey(result: WebSearchResult): string {
   return result.doi ?? result.landing_url ?? result.title;
 }
 
+const WEB_INSPECTOR_TABS = INSPECTOR_TABS.filter(
+  (tab) => tab.id === "details" || tab.id === "similar",
+);
+
 export default function Repository() {
   const catalog = useCatalog();
   const { prefs } = useLayoutPrefs();
   const presenting = useSiteMode().mode === "presentation";
+  /* The advanced similar-papers layer (zones, edge-strength, topic
+     edges, year gradient) unlocks with Pro; basic gets the plain graph. */
+  const { proUnlocked } = useSun();
 
   /* Resizable pane widths (persisted per browser). */
 
@@ -159,6 +192,27 @@ export default function Repository() {
   const recommendRequestRef = useRef(0);
   const [topK, setTopK] = useState(10);
   const [diversify, setDiversify] = useState(false);
+  // Opt-in: also fetch live web recommendations and merge them into
+  // the Recommend list (off by default, remembered per browser).
+  const [blendWeb, setBlendWebRaw] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(BLEND_WEB_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  function setBlendWeb(next: boolean) {
+    setBlendWebRaw(next);
+    try {
+      window.localStorage.setItem(BLEND_WEB_KEY, next ? "1" : "0");
+    } catch {
+      // Best-effort.
+    }
+  }
+  // Merged rows (null = blend off for the list on screen) and the
+  // notice shown when the web half failed.
+  const [blendRows, setBlendRows] = useState<BlendRow[] | null>(null);
+  const [blendNotice, setBlendNotice] = useState<string | null>(null);
   const [subject, setSubject] = useState(subjects[0]);
   const [category, setCategory] = useState(categories[0]);
   const [documentType, setDocumentType] = useState(documentTypes[0]);
@@ -192,9 +246,10 @@ export default function Repository() {
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState<
-    "details" | "notes" | "pdf" | "similar"
-  >("details");
+  const [detailTab, setDetailTab] = useState<InspectorTab>("details");
+  // Shared tabbed inspector pop-up (same tab bodies as the inline pane).
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [webTab, setWebTab] = useState<"details" | "similar">("details");
 
   // Right-side Stats for Nerds pane (live while you search).
   const { on: nerdOn } = useNerdButtons();
@@ -664,6 +719,37 @@ export default function Repository() {
     setRecommendLoading(true);
     setRecommendError(null);
 
+    // Opt-in web half, fetched in parallel. It never throws: a failure
+    // resolves to null so the local results still land.
+    const blendController = blendWeb ? new AbortController() : null;
+    const webHalf: Promise<WebSearchResult[] | null> = blendController
+      ? (async () => {
+          try {
+            let webQuery = query;
+            if (!webQuery && seedOverride !== undefined) {
+              const seedPaper =
+                papers.find((p) => p.id === seedOverride) ??
+                (selectedPaper?.id === seedOverride ? selectedPaper : null) ??
+                (await getPaper(seedOverride));
+              webQuery = seedWebQuery(seedPaper);
+            }
+            if (!webQuery) return null;
+            return await getWebRecommendations({
+              q: webQuery,
+              pipeline: pipelineId,
+              topK: Math.min(topK, 25),
+              peer_reviewed: true,
+              open_access: false,
+              sources: webSources,
+              ...(pipelineId === "custom" ? { weights: customWeights } : {}),
+              signal: blendController.signal,
+            });
+          } catch {
+            return null;
+          }
+        })()
+      : Promise.resolve(null);
+
     try {
       const results = await getRecommendations({
         pipeline: pipelineId,
@@ -679,10 +765,28 @@ export default function Repository() {
         ...(diversify ? { mmrLambda: MMR_LAMBDA } : {}),
       });
 
+      const webHits = blendController ? await webHalf : null;
+
       // A newer search (e.g. another algorithm clicked meanwhile) wins.
       if (requestId !== recommendRequestRef.current) return;
 
-      setRecommendResults(results);
+      if (blendController) {
+        const rows = blendRecommendations({
+          local: results,
+          web: webHits ?? [],
+          topK,
+        });
+        setBlendRows(rows);
+        setBlendNotice(webHits === null ? "Web results unavailable" : null);
+        setSelectedWeb(null);
+        setRecommendResults(
+          rows.flatMap((row) => (row.origin === "local" ? [row.result] : [])),
+        );
+      } else {
+        setBlendRows(null);
+        setBlendNotice(null);
+        setRecommendResults(results);
+      }
       setRecommendSearched(true);
 
       publishStats({
@@ -694,6 +798,7 @@ export default function Repository() {
         ...(diversify ? { mmrLambda: MMR_LAMBDA } : {}),
       });
     } catch (e) {
+      blendController?.abort();
       if (requestId !== recommendRequestRef.current) return;
 
       setRecommendError(
@@ -724,7 +829,12 @@ export default function Repository() {
 
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipelineId, customWeights, topK, diversify]);
+  }, [pipelineId, customWeights, topK, diversify, blendWeb, blendWeb ? webSources : null]);
+
+  // A web row picked in Web mode must not linger in the Recommend inspector.
+  useEffect(() => {
+    if (searchMode === "recommend") setSelectedWeb(null);
+  }, [searchMode]);
 
   // The same for web results: a new algorithm re-ranks the live hits.
   useEffect(() => {
@@ -941,11 +1051,41 @@ export default function Repository() {
     );
   }
 
+  /* Sync = refresh metadata from Crossref (authors as given / middle /
+     family, missing year / abstract), then rebuild the index. It runs on
+     the server in the background; this follows it and reports. */
+  function syncLine(job: SyncJob): string {
+    if (job.phase === "indexing") return "Sync: rebuilding the recommendation index…";
+    const total = job.total ?? 0;
+    return total > 0
+      ? `Sync: refreshing metadata ${job.done ?? 0}/${total} · ${job.changed ?? 0} updated`
+      : "Sync: looking for papers to refresh…";
+  }
+
   async function handleSync() {
     setSyncing(true);
     setError(null);
     try {
-      await rebuildRecommendationIndex();
+      let job: SyncJob;
+
+      try {
+        job = await startSync();
+      } catch (e) {
+        // Already running (e.g. started before a page reload): follow it.
+        if (!(e instanceof Error && /already running/i.test(e.message))) throw e;
+        job = await getSyncStatus();
+      }
+
+      while (job.state === "running") {
+        setActionMessage(syncLine(job));
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        job = await getSyncStatus();
+      }
+
+      if (job.state === "error") {
+        throw new Error(job.error ?? "the sync stopped unexpectedly");
+      }
+
       notifyRecommendationIndexStale();
       const filters = {
         search: search || undefined,
@@ -958,6 +1098,16 @@ export default function Repository() {
       };
       const fresh = await listPapers(filters);
       setPapers(fresh);
+
+      const done = job.summary;
+      const parts = Object.entries(done?.fields ?? {}).map(
+        ([field, count]) => `${count} ${field.replace("_", " ")}`,
+      );
+      setActionMessage(
+        done && done.changed > 0
+          ? `Sync complete: ${done.changed} papers updated (${parts.join(", ")}).`
+          : "Sync complete: metadata was already up to date.",
+      );
     } catch (e) {
       setError(
         e instanceof Error ? `Sync failed: ${e.message}` : "Sync failed.",
@@ -1056,10 +1206,203 @@ export default function Repository() {
   }
 
   const selected = selectedPaper;
+  const webInspectorActive =
+    searchMode === "web" ||
+    (searchMode === "recommend" && selectedWeb !== null);
   const selectedSaved = selected ? savedIds.has(selected.id) : false;
 
+  /** Web-result inspector tabs: Details (the record + Import) and
+   *  Similar (library neighbours + OpenAlex related works). */
+  function renderWebInspectorTab(tab: "details" | "similar") {
+    const result = selectedWeb;
+    if (!result) return null;
+    if (tab === "similar") {
+      return (
+        <WebSimilarPanel
+          result={result}
+          pipeline={pipelineId}
+          pipelineLabel={pipelineName(activePipelineConfig)}
+          weights={pipelineId === "custom" ? customWeights : undefined}
+          topK={topK}
+          onSelectPaper={(paper) => {
+            /* Web mode has no local selection pane: hop to the
+               repository scope (web results stay loaded). */
+            if (searchMode === "web") setSearchMode("repository");
+            else setSelectedWeb(null);
+            setPopupOpen(false);
+            selectPaper(paper);
+          }}
+        />
+      );
+    }
+    return (
+              <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="rounded border-[2px] border-gray-900 bg-white px-1.5 py-0.5 font-mono text-xs font-bold uppercase tracking-[0.1em] text-ink">
+                    {result.source}
+                  </span>
+                  <span className="text-muted">{result.publication_year ?? "—"}</span>
+                  <span className="text-muted">·</span>
+                  <span className="text-muted">{result.document_type ?? "Work"}</span>
+                  {result.is_oa === true && (
+                    <span className="rounded border-[2px] border-gray-900 bg-accent px-1.5 py-0.5 text-xs font-bold uppercase tracking-[0.1em] text-onAccent">
+                      Open access
+                    </span>
+                  )}
+                </div>
+
+                <h2 className="text-base font-bold leading-6 text-ink">
+                  {result.title}
+                </h2>
+                <p className="mt-1 text-xs text-muted">
+                  {result.author ?? "Unknown author"}
+                  {result.venue ? ` · ${result.venue}` : ""}
+                  {result.citations != null && result.citations > 0
+                    ? ` · cited ${result.citations}`
+                    : ""}
+                </p>
+
+                {result.abstract && (
+                  <p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-muted">
+                    {result.abstract}
+                  </p>
+                )}
+
+                {result.doi && (
+                  <p className="mt-3 break-all text-xs text-muted">
+                    <span className="font-bold text-ink">DOI:</span>{" "}
+                    {result.doi}
+                  </p>
+                )}
+
+                {result.landing_url && (
+                  <a
+                    href={result.landing_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 block break-all text-xs font-bold text-ink underline hover:decoration-2"
+                  >
+                    Open landing page ↗
+                  </a>
+                )}
+
+                {/* Actions */}
+                <div className="mt-5 flex flex-wrap gap-2 border-t-[3px] border-gray-900 pt-4">
+                  {(() => {
+                    const key = webKey(result);
+                    const status = webImportStatus[key];
+
+                    if (status === "saved") {
+                      return (
+                        <span className="inline-flex items-center gap-1.5 rounded border-[3px] border-gray-900 bg-accent px-3 py-2 text-sm font-bold text-onAccent">
+                          <Check className="h-3.5 w-3.5" />
+                          Saved to repository
+                        </span>
+                      );
+                    }
+
+                    if (status === "exists") {
+                      return (
+                        <span className="inline-flex items-center gap-1.5 rounded border-[3px] border-gray-900 bg-white px-3 py-2 text-sm font-bold text-ink">
+                          <Check className="h-3.5 w-3.5" />
+                          Already in repository
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <Button
+                        variant="primary"
+                        type="button"
+                        onClick={() => void importWebResult(result)}
+                        disabled={importingKey !== null}
+                      >
+                        {importingKey === key
+                          ? "Importing…"
+                          : "Import into repository"}
+                      </Button>
+                    );
+                  })()}
+
+                  {webRowErrors[webKey(result)] && (
+                    <span className="text-xs font-bold text-ink">
+                      {webRowErrors[webKey(result)]}
+                    </span>
+                  )}
+                </div>
+              </div>
+    );
+  }
+
+  /** One implementation of each inspector tab body, rendered inline
+   *  (compact) in the right pane and full-size in the pop-up. */
+  function renderInspectorTab(tab: InspectorTab, inPopup: boolean) {
+    if (!selected) return null;
+    const customW = pipelineId === "custom" ? customWeights : undefined;
+    if (tab === "similar") {
+      return inPopup ? (
+        <ConnectionsWorkbench
+          paperId={selected.id}
+          pipeline={pipelineId}
+          pipelineLabel={pipelineName(activePipelineConfig)}
+          weights={customW}
+          controls={proUnlocked}
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ConnectionsPane
+            paperId={selected.id}
+            pipeline={pipelineId}
+            pipelineLabel={pipelineName(activePipelineConfig)}
+            weights={customW}
+            controls={proUnlocked}
+            onExpand={() => {
+              setDetailTab("similar");
+              setPopupOpen(true);
+            }}
+          />
+        </div>
+      );
+    }
+    if (tab === "notes") {
+      return (
+        <PaperNotesBody
+          paperId={selected.id}
+          value={notes[selected.id] ?? ""}
+          onChange={saveNotes}
+        />
+      );
+    }
+    if (tab === "pdf") {
+      return (
+        <PaperPdfBody
+          paper={selected}
+          onPreview={openPdfPreview}
+          onDeletePdf={() => handleDeletePdf(selected)}
+          onAttached={(updated) => {
+            setPapers((prev) =>
+              prev.map((p) => (p.id === updated.id ? updated : p)),
+            );
+            setSelectedPaper(updated);
+          }}
+        />
+      );
+    }
+    return (
+      <PaperDetailsBody
+        paper={selected}
+        isSelectingSeed={isSelectingSeed}
+        saved={selectedSaved}
+        onUseSeed={() => handleSelectSeed(selected.id)}
+        onSave={() => handleSave(selected.id)}
+        onView={() => openPdfPreview(null)}
+        onDelete={() => handleDelete(selected.id, selected.title)}
+      />
+    );
+  }
+
   return (
-    <div className="mx-auto w-full max-w-[1560px]">
+    <div className="cat-repo mx-auto w-full max-w-[1560px]">
       <HuntItem item={HUNT_ITEMS.find((item) => item.id === "hunt-orb")!} />
       <PageHeader
         eyebrow="Repository"
@@ -1069,7 +1412,7 @@ export default function Repository() {
           loading
             ? "Loading papers…"
             : searchMode === "web"
-              ? `Web search · legitimate sources (OpenAlex, Crossref, arXiv) · ${
+              ? `Web search · legitimate sources (OpenAlex, Crossref, arXiv, DOAJ) · ${
                   webSearched
                     ? `${webResults.length} result${webResults.length === 1 ? "" : "s"}`
                     : "peer-reviewed by default"
@@ -1088,13 +1431,14 @@ export default function Repository() {
               aria-pressed={statsOpen}
               onClick={toggleStats}
               title="Toggle the live Stats for Nerds pane on the right"
+              aria-label="Stats for Nerds"
               className={`nerd-glitch-in inline-flex h-9 items-center justify-center rounded border-[3px] border-gray-900 px-3 text-sm font-semibold transition-colors ${
                 statsOpen
                   ? "bg-accent text-onAccent"
                   : "bg-white text-ink hover:bg-accentSoft"
               }`}
             >
-              Stats for Nerds
+              <ResponsiveLabel icon={Sigma}>Stats for Nerds</ResponsiveLabel>
             </button>
             )}
             <LayoutOptions />
@@ -1143,12 +1487,12 @@ export default function Repository() {
 
         {prefs.sidebar && (
         <aside
-          className={`shrink-0 overflow-y-auto rounded border-[3px] border-gray-900 bg-white lg:block lg:w-[var(--pane-left)] ${
+          className={`cat-panel shrink-0 overflow-y-auto rounded border-[3px] border-gray-900 bg-white lg:block lg:w-[var(--pane-left)] ${
             filtersOpenNarrow ? "" : "hidden"
           }`}
           data-tips="repo-filters"
         >
-          <div className="flex items-center gap-1.5 border-b-[3px] border-gray-900 bg-canvas px-3 py-2">
+          <div className="cat-head flex items-center gap-1.5 border-b-[3px] border-gray-900 bg-canvas px-3 py-2">
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted" />
             <p className="font-mono text-xs font-bold uppercase tracking-[0.15em] text-muted">
               Filter console
@@ -1250,6 +1594,45 @@ export default function Repository() {
                   <p className="mt-1.5 text-xs leading-5 text-muted">
                     Top-K and Diversify live in the Algorithm bar above.
                   </p>
+                  <label className="mt-2 flex cursor-pointer items-start gap-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      checked={blendWeb}
+                      onChange={(e) => setBlendWeb(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0"
+                    />
+                    <span>
+                      Blend in web results
+                      <span className="block text-xs leading-4 text-muted">
+                        Also fetches live hits for the same query and ranks
+                        them with the corpus in one list. Off by default.
+                      </span>
+                    </span>
+                  </label>
+                  {blendWeb && (
+                    <div className="mt-2">
+                      <label className="filter-label" htmlFor="blend-sources">
+                        Web sources
+                      </label>
+                      <select
+                        id="blend-sources"
+                        value={webSources}
+                        onChange={(e) => setWebSources(e.target.value)}
+                        className="min-h-10 w-full rounded border-[3px] border-gray-900 bg-field px-3 py-2 text-sm font-medium text-ink"
+                      >
+                        <option value="openalex,crossref,arxiv">All (OpenAlex + Crossref + arXiv)</option>
+                        <option value="openalex,crossref">OpenAlex + Crossref</option>
+                        <option value="openalex,arxiv">OpenAlex + arXiv</option>
+                        <option value="crossref,arxiv">Crossref + arXiv</option>
+                        <option value="openalex">OpenAlex only</option>
+                        <option value="crossref">Crossref only</option>
+                        <option value="arxiv">arXiv only</option>
+                        <option value="openalex,crossref,doaj">OpenAlex + Crossref + DOAJ</option>
+                        <option value="openalex,crossref,arxiv,doaj">All four (+ arXiv, DOAJ)</option>
+                        <option value="doaj">DOAJ only</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1279,7 +1662,7 @@ export default function Repository() {
                       <span className="block text-xs leading-4 text-muted">
                         Journals, conferences, book chapters, no
                         preprints, datasets, or retracted work. Selecting arXiv as a source
-                        includes preprints by design.
+                        includes preprints by design; DOAJ adds open-access journal articles.
                       </span>
                     </span>
                   </label>
@@ -1325,6 +1708,13 @@ export default function Repository() {
                       <option value="openalex">OpenAlex only</option>
                       <option value="crossref">Crossref only</option>
                       <option value="arxiv">arXiv only</option>
+                      <option value="openalex,crossref,doaj">
+                        OpenAlex + Crossref + DOAJ
+                      </option>
+                      <option value="openalex,crossref,arxiv,doaj">
+                        All four (+ arXiv, DOAJ)
+                      </option>
+                      <option value="doaj">DOAJ only</option>
                     </select>
                   </div>
 
@@ -1568,12 +1958,12 @@ export default function Repository() {
             ==================================================== */}
 
         <section
-          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded border-[3px] border-gray-900 bg-white"
+          className="cat-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded border-[3px] border-gray-900 bg-white"
           aria-label="Paper results"
           data-tips="repo-results"
         >
           {/* One header: what this is, how many, and the actions. */}
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b-[3px] border-gray-900 bg-canvas px-4 py-2.5">
+          <div className="cat-head flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b-[3px] border-gray-900 bg-canvas px-4 py-2.5">
             <span className="flex min-w-0 items-center gap-1.5">
               {searchMode === "web" ? (
                 <Globe className="h-3.5 w-3.5 shrink-0 text-muted" />
@@ -1582,7 +1972,7 @@ export default function Repository() {
               ) : (
                 <Table className="h-3.5 w-3.5 shrink-0 text-muted" />
               )}
-              <p className="font-mono text-xs font-bold uppercase tracking-[0.15em] text-ink">
+              <p className="cat-plate font-mono text-xs font-bold uppercase tracking-[0.15em] text-ink">
                 {searchMode === "web"
                   ? "Web results"
                   : searchMode === "recommend"
@@ -1603,7 +1993,7 @@ export default function Repository() {
                     ? recommendLoading
                       ? "ranking…"
                       : recommendSearched
-                        ? `${recommendResults.length} ranked via ${pipelineName(activePipelineConfig)}`
+                        ? `${blendRows ? blendRows.length : recommendResults.length} ranked via ${pipelineName(activePipelineConfig)}`
                         : ""
                     : similarityMode
                       ? similarityLoading
@@ -1813,7 +2203,7 @@ export default function Repository() {
                     description="Enter a query in the filter console, pick a pipeline, and press Rank corpus. Results land here with their score and signal breakdown."
                   />
                 </div>
-              ) : recommendResults.length === 0 ? (
+              ) : (blendRows ?? recommendResults).length === 0 ? (
                 <div className="p-6">
                   <EmptyState
                     title="No matches."
@@ -1821,22 +2211,137 @@ export default function Repository() {
                   />
                 </div>
               ) : (
-                <table className="w-full min-w-[720px] text-left text-xs">
+                <>
+                {blendNotice && (
+                  <p className="status-warning m-3 text-xs" role="status">
+                    {blendNotice}. Showing repository results only.
+                  </p>
+                )}
+                <table className={`w-full text-left text-xs ${compactList ? "" : "min-w-[720px]"}`}>
                   <thead>
                     <tr className="font-pixelify border-b-[3px] border-gray-900 text-xs uppercase tracking-wide text-muted">
                       <th className="w-10 px-3 py-2.5 text-right">#</th>
                       <th className="w-12 px-1 py-2.5 text-center" aria-label="PDF" />
                       <th className="w-12 px-1 py-2.5 text-center" aria-label="Favorite" />
                       <th className="px-2 py-2.5">Title</th>
-                      <th className="px-2 py-2.5">Authors</th>
-                      <th className="px-2 py-2.5 text-right">Year</th>
-                      <th className="px-2 py-2.5 text-right">Type</th>
+                      <th className={`px-2 py-2.5 ${compactList ? "hidden" : ""}`}>Authors</th>
+                      <th className={`px-2 py-2.5 text-right ${compactList ? "hidden" : ""}`}>Year</th>
+                      <th className={`px-2 py-2.5 text-right ${compactList ? "hidden" : ""}`}>Type</th>
                       <th className="px-2 py-2.5 text-right">Score</th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {recommendResults.map((result, index) => {
+                    {(blendRows ?? recommendResults.map((result): BlendRow => ({ origin: "local", result, blendScore: 0 }))).map((row, index) => {
+                      if (row.origin === "web") {
+                        const web = row.web;
+                        const key = webKey(web);
+                        const status = webImportStatus[key];
+                        const webActive = selectedWeb !== null && webKey(selectedWeb) === key;
+                        const comps = web.components;
+                        const webSegments = [
+                          { color: "bg-tfidf", value: comps?.tfidf ?? 0 },
+                          { color: "bg-sbert", value: comps?.sbert ?? 0 },
+                          { color: "bg-meta", value: comps?.metadata ?? 0 },
+                        ];
+                        const webTotal = webSegments.reduce((sum, s) => sum + s.value, 0) || 1;
+                        const webLabel = "Live web result, not in the repository yet";
+
+                        return (
+                          <tr
+                            key={`web:${key}`}
+                            onClick={() => {
+                              setInspectorCollapsed(false);
+                              setSelectedWeb(web);
+                            }}
+                            className={`cat-row cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors pixel-ease ${
+                              webActive ? "bg-accentSoft/60" : "hover:bg-canvas"
+                            }`}
+                          >
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-muted">
+                              {index + 1}
+                            </td>
+                            <td className="px-1 py-2.5 text-center" colSpan={2}>
+                              <span
+                                title={webLabel}
+                                aria-label={webLabel}
+                                className="inline-flex items-center gap-1 rounded border-[2px] border-gray-900 bg-white px-1 py-0.5 font-mono text-xs font-bold leading-none text-ink"
+                              >
+                                <ResponsiveLabel icon={Globe} collapseBelow="xl" iconClassName="h-3 w-3 shrink-0">
+                                  WEB
+                                </ResponsiveLabel>
+                              </span>
+                            </td>
+                            <td className={`px-2 py-2.5 ${compactList ? "w-full max-w-0" : "max-w-[280px]"}`}>
+                              <span className="block font-pixelify font-bold text-ink">
+                                <MathText text={web.title} />
+                              </span>
+                              <span className="mt-0.5 block truncate font-mono text-[11px] text-muted">
+                                {web.source}
+                                {web.venue ? ` · ${web.venue}` : ""}
+                                {web.publication_year ? ` · ${web.publication_year}` : ""}
+                              </span>
+                              <span
+                                className="mt-1 flex flex-wrap items-center gap-2"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {status === "saved" ? (
+                                  <span className="inline-flex items-center gap-1 rounded border-[2px] border-gray-900 bg-accent px-2 py-0.5 text-xs font-bold text-onAccent">
+                                    <Check className="h-2.5 w-2.5" />
+                                    Saved to repository
+                                  </span>
+                                ) : status === "exists" ? (
+                                  <span className="inline-flex items-center gap-1 rounded border-[2px] border-gray-900 bg-white px-2 py-0.5 text-xs font-bold text-ink">
+                                    <Check className="h-2.5 w-2.5" />
+                                    Already in repository
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => void importWebResult(web)}
+                                    disabled={importingKey !== null}
+                                    className="rounded border-[2px] border-gray-900 bg-accent px-2 py-0.5 text-xs font-bold text-onAccent transition-colors pixel-ease hover:bg-accentSoft disabled:opacity-50"
+                                  >
+                                    {importingKey === key ? "Importing…" : "Import"}
+                                  </button>
+                                )}
+                                {webRowErrors[key] && (
+                                  <span className="text-xs font-bold text-ink">{webRowErrors[key]}</span>
+                                )}
+                              </span>
+                            </td>
+                            <td className={`max-w-[180px] px-2 py-2.5 ${compactList ? "hidden" : ""}`}>
+                              <span className="block truncate font-pixelify text-muted">{web.author ?? "—"}</span>
+                            </td>
+                            <td className={`px-2 py-2.5 text-right ${compactList ? "hidden" : ""}`}>
+                              <span className="font-pixelify text-ink">{web.publication_year ?? "—"}</span>
+                            </td>
+                            <td className={`px-2 py-2.5 text-right ${compactList ? "hidden" : ""}`}>
+                              <span className="font-pixelify text-muted">{web.document_type ?? "Work"}</span>
+                            </td>
+                            <td className="px-2 py-2.5 text-right">
+                              <div className={`ml-auto flex flex-col items-end ${compactList ? "w-14" : "w-24"}`}>
+                                <span className="font-mono font-bold text-ink">
+                                  {Number(row.score).toFixed(4)}
+                                </span>
+                                <span className="mt-1 flex h-1.5 w-full overflow-hidden rounded-full border-[1px] border-gray-900">
+                                  {webSegments.map((segment, i) =>
+                                    segment.value > 0 ? (
+                                      <span
+                                        key={i}
+                                        className={segment.color}
+                                        style={{ width: `${(segment.value / webTotal) * 100}%` }}
+                                      />
+                                    ) : null,
+                                  )}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      const result = row.result;
                       const paper = result.paper;
                       const active = selected?.id === paper.id;
                       const isSaved = savedIds.has(paper.id);
@@ -1852,8 +2357,11 @@ export default function Repository() {
                       return (
                         <tr
                           key={paper.id}
-                          onClick={() => selectPaper(paper)}
-                          className={`cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors pixel-ease ${
+                          onClick={() => {
+                            setSelectedWeb(null);
+                            selectPaper(paper);
+                          }}
+                          className={`cat-row cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors pixel-ease ${
                             active
                               ? "bg-accentSoft/60"
                               : "hover:bg-canvas"
@@ -1884,7 +2392,7 @@ export default function Repository() {
                               <Star className="h-4 w-4" />
                             </button>
                           </td>
-                          <td className="max-w-[280px] px-2 py-2.5">
+                          <td className={`px-2 py-2.5 ${compactList ? "w-full max-w-0" : "max-w-[280px]"}`}>
                             <EditableCell
                               paperId={paper.id}
                               field="title"
@@ -1895,7 +2403,7 @@ export default function Repository() {
                               renderClassName="block font-pixelify font-bold text-ink"
                             />
                           </td>
-                          <td className="max-w-[180px] px-2 py-2.5">
+                          <td className={`max-w-[180px] px-2 py-2.5 ${compactList ? "hidden" : ""}`}>
                             <EditableCell
                               paperId={paper.id}
                               field="author"
@@ -1905,7 +2413,7 @@ export default function Repository() {
                               renderClassName="font-pixelify text-muted"
                             />
                           </td>
-                          <td className="px-2 py-2.5 text-right">
+                          <td className={`px-2 py-2.5 text-right ${compactList ? "hidden" : ""}`}>
                             <EditableCell
                               paperId={paper.id}
                               field="publication_year"
@@ -1916,7 +2424,7 @@ export default function Repository() {
                               renderClassName="font-pixelify text-ink"
                             />
                           </td>
-                          <td className="px-2 py-2.5 text-right">
+                          <td className={`px-2 py-2.5 text-right ${compactList ? "hidden" : ""}`}>
                             <EditableCell
                               paperId={paper.id}
                               field="document_type"
@@ -1927,7 +2435,7 @@ export default function Repository() {
                             />
                           </td>
                           <td className="px-2 py-2.5 text-right">
-                            <div className="ml-auto flex w-24 flex-col items-end">
+                            <div className={`ml-auto flex flex-col items-end ${compactList ? "w-14" : "w-24"}`}>
                               <span className="font-mono font-bold text-ink">
                                 {Number(result.score).toFixed(4)}
                               </span>
@@ -1951,6 +2459,7 @@ export default function Repository() {
                     })}
                   </tbody>
                 </table>
+                </>
               )
             ) : loading ? (
               <div className="p-8 text-center">
@@ -2074,6 +2583,7 @@ export default function Repository() {
                     return (
                       <tr
                         key={paper.id}
+                        style={{ "--spine": spineColor(paperSubject) ?? "transparent" } as React.CSSProperties}
                         onClick={() => selectPaper(paper)}
                         onPointerDown={(event) => {
                           if (event.pointerType !== "mouse") {
@@ -2098,7 +2608,7 @@ export default function Repository() {
                             event.clientY
                           );
                         }}
-                        className={`cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors pixel-ease ${
+                        className={`cat-row cursor-pointer border-b border-gray-200 last:border-b-0 transition-colors pixel-ease ${
                           isSelected ? "bg-accentSoft" : active ? "bg-accentSoft/60" : "hover:bg-canvas"
                         }`}
                       >
@@ -2136,7 +2646,8 @@ export default function Repository() {
                           </button>
                         </td>
                         {compactList ? (
-                        <td className="min-w-0 px-2 py-2.5">
+                        <td className="w-full min-w-0 max-w-0 px-2 py-2.5">
+                          <span className="cat-acc" aria-hidden="true">{accession(paper.id)}</span>
                           <EditableCell
                             paperId={paper.id}
                             field="title"
@@ -2210,6 +2721,7 @@ export default function Repository() {
                         </td>
                         ) : (
                         <td className="w-[46%] max-w-0 px-2 py-2.5">
+                          <span className="cat-acc" aria-hidden="true">{accession(paper.id)}</span>
                           <div className="flex min-w-0 items-center gap-1.5">
                             {paperSubject && (
                               <span className="shrink-0 rounded border-[2px] border-gray-900 bg-gray-900 px-1 py-0.5 text-xs font-bold text-white">
@@ -2381,7 +2893,7 @@ export default function Repository() {
             className="flex h-9 w-full items-center justify-center gap-2 bg-canvas font-mono text-xs font-bold uppercase tracking-[0.15em] text-muted transition-colors pixel-ease hover:bg-accentSoft hover:text-ink lg:h-full lg:min-h-[240px] lg:text-lg"
           >
             <span aria-hidden="true">«</span>
-            <span className="lg:hidden">Inspector</span>
+            <span className="hidden sm:inline lg:hidden">Inspector</span>
           </button>
         </aside>
       ) : (
@@ -2393,8 +2905,8 @@ export default function Repository() {
         />
 
         {statsOpen && (
-        <aside className="w-full shrink-0 overflow-hidden rounded border-[3px] border-gray-900 bg-white lg:w-[var(--pane-right)]">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b-[3px] border-gray-900 bg-canvas px-3 py-1.5">
+        <aside className="cat-panel cat-card w-full shrink-0 overflow-hidden rounded border-[3px] border-gray-900 bg-white lg:w-[var(--pane-right)]">
+          <div className="cat-head sticky top-0 z-10 flex items-center justify-between border-b-[3px] border-gray-900 bg-canvas px-3 py-1.5">
             <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
               Inspector
             </span>
@@ -2420,8 +2932,8 @@ export default function Repository() {
         )}
 
         {!statsOpen && (
-        <aside className="w-full shrink-0 overflow-y-auto rounded border-[3px] border-gray-900 bg-white lg:w-[var(--pane-right)]">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b-[3px] border-gray-900 bg-canvas px-3 py-1.5">
+        <aside className="cat-panel cat-card w-full shrink-0 overflow-y-auto rounded border-[3px] border-gray-900 bg-white lg:w-[var(--pane-right)]">
+          <div className="cat-head sticky top-0 z-10 flex items-center justify-between border-b-[3px] border-gray-900 bg-canvas px-3 py-1.5">
             <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
               Inspector
             </span>
@@ -2435,7 +2947,7 @@ export default function Repository() {
               »
             </button>
           </div>
-          {searchMode === "web" ? (
+          {searchMode === "web" || (searchMode === "recommend" && selectedWeb !== null) ? (
             /* ------------------------------------------------
                WEB RESULT DETAILS
                ------------------------------------------------ */
@@ -2450,100 +2962,34 @@ export default function Repository() {
                 </p>
               </div>
             ) : (
-              <div className="p-5">
-                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                  <span className="rounded border-[2px] border-gray-900 bg-white px-1.5 py-0.5 font-mono text-xs font-bold uppercase tracking-[0.1em] text-ink">
-                    {selectedWeb.source}
-                  </span>
-                  <span className="text-muted">{selectedWeb.publication_year ?? "—"}</span>
-                  <span className="text-muted">·</span>
-                  <span className="text-muted">{selectedWeb.document_type ?? "Work"}</span>
-                  {selectedWeb.is_oa === true && (
-                    <span className="rounded border-[2px] border-gray-900 bg-accent px-1.5 py-0.5 text-xs font-bold uppercase tracking-[0.1em] text-onAccent">
-                      Open access
-                    </span>
-                  )}
+              <div className="flex h-full flex-col">
+                <div className="flex shrink-0 gap-0.5 border-b-[3px] border-gray-900 bg-canvas p-2">
+                  {WEB_INSPECTOR_TABS.map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setWebTab(id as "details" | "similar")}
+                      aria-pressed={webTab === id}
+                      className={`flex-1 rounded border-[3px] border-gray-900 px-2 py-1.5 text-sm font-semibold transition-colors pixel-ease ${
+                        webTab === id
+                          ? "bg-accent text-onAccent"
+                          : "bg-surface text-ink hover:bg-accentSoft"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setPopupOpen(true)}
+                    title="Open in pop-up"
+                    aria-label="Open in pop-up"
+                    className="inspector-popout-btn"
+                    >
+                      <Maximize2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
                 </div>
-
-                <h2 className="text-base font-bold leading-6 text-ink">
-                  {selectedWeb.title}
-                </h2>
-                <p className="mt-1 text-xs text-muted">
-                  {selectedWeb.author ?? "Unknown author"}
-                  {selectedWeb.venue ? ` · ${selectedWeb.venue}` : ""}
-                  {selectedWeb.citations != null && selectedWeb.citations > 0
-                    ? ` · cited ${selectedWeb.citations}`
-                    : ""}
-                </p>
-
-                {selectedWeb.abstract && (
-                  <p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-muted">
-                    {selectedWeb.abstract}
-                  </p>
-                )}
-
-                {selectedWeb.doi && (
-                  <p className="mt-3 break-all text-xs text-muted">
-                    <span className="font-bold text-ink">DOI:</span>{" "}
-                    {selectedWeb.doi}
-                  </p>
-                )}
-
-                {selectedWeb.landing_url && (
-                  <a
-                    href={selectedWeb.landing_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 block break-all text-xs font-bold text-ink underline hover:decoration-2"
-                  >
-                    Open landing page ↗
-                  </a>
-                )}
-
-                {/* Actions */}
-                <div className="mt-5 flex flex-wrap gap-2 border-t-[3px] border-gray-900 pt-4">
-                  {(() => {
-                    const key = webKey(selectedWeb);
-                    const status = webImportStatus[key];
-
-                    if (status === "saved") {
-                      return (
-                        <span className="inline-flex items-center gap-1.5 rounded border-[3px] border-gray-900 bg-accent px-3 py-2 text-sm font-bold text-onAccent">
-                          <Check className="h-3.5 w-3.5" />
-                          Saved to repository
-                        </span>
-                      );
-                    }
-
-                    if (status === "exists") {
-                      return (
-                        <span className="inline-flex items-center gap-1.5 rounded border-[3px] border-gray-900 bg-white px-3 py-2 text-sm font-bold text-ink">
-                          <Check className="h-3.5 w-3.5" />
-                          Already in repository
-                        </span>
-                      );
-                    }
-
-                    return (
-                      <Button
-                        variant="primary"
-                        type="button"
-                        onClick={() => void importWebResult(selectedWeb)}
-                        disabled={importingKey !== null}
-                      >
-                        {importingKey === key
-                          ? "Importing…"
-                          : "Import into repository"}
-                      </Button>
-                    );
-                  })()}
-
-                  {webRowErrors[webKey(selectedWeb)] && (
-                    <span className="text-xs font-bold text-ink">
-                      {webRowErrors[webKey(selectedWeb)]}
-                    </span>
-                  )}
-                </div>
+                {renderWebInspectorTab(webTab)}
               </div>
             )
           ) : !selected ? (
@@ -2581,257 +3027,18 @@ export default function Repository() {
                           : "Similar"}
                   </button>
                 ))}
-              </div>
-
-              {detailTab === "similar" ? (
-                /* ----------------------------------------------
-                   SIMILAR TAB — connection graph / contrast for the
-                   selected paper (local repository or live web).
-                   ---------------------------------------------- */
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                  <ConnectionsPane
-                    paperId={selected.id}
-                    pipeline={pipelineId}
-                    pipelineLabel={pipelineName(activePipelineConfig)}
-                    weights={
-                      pipelineId === "custom"
-                        ? customWeights
-                        : undefined
-                    }
-                    controls
-                    onExpand={() =>
-                      navigate("/recommendations", {
-                        state: {
-                          graphPaperId: selected.id,
-                          searchTab: "connections",
-                        },
-                      })
-                    }
-                  />
-                </div>
-              ) : detailTab === "notes" ? (
-                /* ----------------------------------------------
-                   NOTES TAB
-                   ---------------------------------------------- */
-                <div className="flex min-h-0 flex-1 flex-col p-5">
-                  <p className="mb-2 text-xs font-bold text-muted">
-                    Notes on this paper
-                  </p>
-                  <textarea
-                    value={notes[selected.id] ?? ""}
-                    onChange={(e) => saveNotes(selected.id, e.target.value)}
-                    placeholder="Write annotations, quotes, or reading notes here…"
-                    className="ui-input min-h-40 flex-1 resize-y font-mono text-xs leading-5"
-                  />
-                  <p className="mt-2 text-xs text-muted">
-                    Saved automatically in this browser.
-                  </p>
-                </div>
-              ) : detailTab === "pdf" ? (
-                /* ----------------------------------------------
-                   PDF TAB — preview, fetch, delete
-                   ---------------------------------------------- */
-                <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                  {hasPdf(selected) ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => openPdfPreview(null)}
-                        title="Preview in the pop-up viewer"
-                        className="block w-full overflow-hidden rounded border-[2px] border-gray-900 bg-canvas transition-colors pixel-ease hover:border-gray-600"
-                      >
-                        <iframe
-                          src={getPaperPdfUrl(selected.id)}
-                          title={selected.title || "Paper PDF"}
-                          className="pointer-events-none h-72 w-full border-0"
-                        />
-                      </button>
-
-                      <p className="mt-3 break-all font-mono text-xs text-muted">
-                        <span className="font-bold text-ink">File:</span>{" "}
-                        {selected.stored_path}
-                      </p>
-
-                      <div className="mt-4 flex flex-wrap items-center gap-2">
-                        <Button
-                          type="button"
-                          onClick={() => openPdfPreview(null)}
-                        >
-                          Preview in viewer
-                        </Button>
-
-                        <a
-                          href={getPaperPdfUrl(selected.id)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex h-9 items-center justify-center rounded border-[3px] border-gray-900 bg-white px-3 text-sm font-semibold text-ink hover:bg-accent hover:text-onAccent transition-colors"
-                        >
-                          Open full PDF ↗
-                        </a>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeletePdf(selected)}
-                          className="inline-flex h-9 items-center justify-center rounded border-[3px] border-gray-900 bg-white px-3 text-sm font-semibold text-ink hover:bg-accent hover:text-onAccent transition-colors"
-                        >
-                          Delete PDF
-                        </button>
-                      </div>
-
-                      <p className="mt-3 text-xs leading-5 text-muted">
-                        Deleting the PDF keeps the bibliographic record. The PDF
-                        you can fetch a different open-access copy here
-                        afterwards.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="mb-3 text-xs leading-5 text-muted">
-                        No PDF attached to this paper yet. Search the
-                        open-access sources below, or delete and
-                        replace an existing copy.
-                      </p>
-
-                      <FindPdfPanel
-                        key={selected.id}
-                        paper={selected}
-                        onPreview={(url) => openPdfPreview(url)}
-                        onAttached={(updated) => {
-                          setPapers((prev) =>
-                            prev.map((p) =>
-                              p.id === updated.id ? updated : p,
-                            ),
-                          );
-                          setSelectedPaper(updated);
-                        }}
-                      />
-                    </>
-                  )}
-                </div>
-              ) : (
-              <div className="p-5">
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                {(() => {
-                  const { subject: s, category: c } = categoryOf(selected);
-                  return (
-                    <>
-                      {s && (
-                        <span className="rounded border-[2px] border-gray-900 bg-gray-900 px-1.5 py-0.5 text-xs font-bold text-white">
-                          {s}
-                        </span>
-                      )}
-                      {c && <span className="text-muted">{c}</span>}
-                      <span className="text-muted">·</span>
-                      <span className="text-muted">{selected.publication_year ?? "—"}</span>
-                      <span className="text-muted">·</span>
-                      <span className="text-muted">{selected.document_type ?? "Document"}</span>
-                    </>
-                  );
-                })()}
-              </div>
-
-              <h2 className="text-base font-bold leading-6 text-ink">
-                {selected.title || "Untitled paper"}
-              </h2>
-              <p className="mt-1 text-xs text-muted">
-                {selected.author ?? "Unknown author"}
-                {selected.citation_count != null ? ` · ${selected.citation_count} cited` : ""}
-              </p>
-
-              {selected.abstract && (
-                <p className="mt-3 whitespace-pre-wrap text-xs leading-5 text-muted">
-                  {selected.abstract}
-                </p>
-              )}
-
-              {/* Recommendation signal dots */}
-              <div className="mt-4 rounded border-[2px] border-gray-900 bg-canvas p-3">
-                <p className="mb-2 text-xs font-bold text-ink">
-                  Recommendation signals
-                </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {SIGNAL_FIELDS.map((field) => {
-                    const filled =
-                      selected[field] != null && selected[field] !== "";
-                    return (
-                      <span key={field} className="flex items-center gap-1.5 text-xs text-muted">
-                        <span
-                          className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-[2px] ${
-                            filled ? "border-gray-900 bg-ink" : "border-gray-900 bg-white"
-                          }`}
-                        >
-                          {filled && <Check className="h-2 w-2 text-onInk" />}
-                        </span>
-                        {field === "publication_year" ? "Year" : field[0].toUpperCase() + field.slice(1)}
-                      </span>
-                    );
-                  })}
-                </div>
-                <p className="mt-2 text-xs text-muted">
-                  {selected.is_valid_for_recommendation
-                    ? "Valid for recommendation."
-                    : `Missing: ${selected.missing_fields ?? "some fields"}.`}
-                </p>
-              </div>
-
-              {selected.doi && (
-                <p className="mt-3 break-all text-xs text-muted">
-                  <span className="font-bold text-ink">DOI:</span> {selected.doi}
-                </p>
-              )}
-
-              {selected.keywords && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {selected.keywords.split(",").map((k) => k.trim()).filter(Boolean).slice(0, 6).map((k) => (
-                    <span key={k} className="rounded border-[2px] border-gray-900 bg-white px-1.5 py-0.5 font-mono text-xs text-ink">
-                      {k}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <p className="mt-3 break-all font-mono text-xs text-muted">
-                <span className="font-bold text-ink">File:</span> {selected.stored_path || "No file"}
-              </p>
-
-              {/* Actions */}
-              <div className="mt-5 flex flex-wrap gap-2 border-t-[3px] border-gray-900 pt-4">
-                {isSelectingSeed ? (
-                  <Button
-                    variant="primary"
-                    type="button"
-                    disabled={!selected.is_valid_for_recommendation}
-                    onClick={() => handleSelectSeed(selected.id)}
+                <button
+                  type="button"
+                  onClick={() => setPopupOpen(true)}
+                  title="Open in pop-up"
+                  aria-label="Open in pop-up"
+                  className="inspector-popout-btn"
                   >
-                    Use as seed
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="secondary"
-                      type="button"
-                      onClick={() => handleSave(selected.id)}
-                      disabled={selectedSaved}
-                    >
-                      {selectedSaved ? "Saved" : "Save paper"}
-                    </Button>
-
-                    <Button variant="quiet" type="button" onClick={() => openPdfPreview(null)}>
-                      View
-                    </Button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(selected.id, selected.title)}
-                      className="inline-flex h-9 items-center justify-center rounded border-[3px] border-gray-900 bg-white px-3 text-sm font-semibold text-ink hover:bg-accent hover:text-onAccent transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </>
-                )}
+                    <Maximize2 className="h-4 w-4" aria-hidden="true" />
+                  </button>
               </div>
-            </div>
-              )}
+
+              {renderInspectorTab(detailTab, false)}
             </div>
           )}
         </aside>
@@ -2849,8 +3056,8 @@ export default function Repository() {
                 webResults.length === 1 ? "" : "s"
               }`
             : searchMode === "recommend"
-              ? `${recommendSearched ? recommendResults.length : 0} ranked result${
-                  recommendResults.length === 1 ? "" : "s"
+              ? `${recommendSearched ? (blendRows ?? recommendResults).length : 0} ranked result${
+                  (blendRows ?? recommendResults).length === 1 ? "" : "s"
                 }`
               : `Showing ${rankedPapers.length} of ${papers.length} document${
                   papers.length === 1 ? "" : "s"
@@ -2869,6 +3076,7 @@ export default function Repository() {
           <span>
             top_k: {topK}
             {diversify ? " · diversify: on" : ""}
+            {blendRows ? " · web: blended" : ""}
           </span>
         )}
         <span className="text-ink">double-click cells to edit · autosaves</span>
@@ -2891,10 +3099,44 @@ export default function Repository() {
         />
       )}
 
+      <InspectorPopup
+        open={popupOpen && (webInspectorActive ? !!selectedWeb : !!selected)}
+        title={
+          webInspectorActive
+            ? selectedWeb?.title || "Web result"
+            : selected?.title || "Paper"
+        }
+        tab={webInspectorActive ? webTab : detailTab}
+        tabs={webInspectorActive ? WEB_INSPECTOR_TABS : INSPECTOR_TABS}
+        onTabChange={(tab) =>
+          webInspectorActive
+            ? setWebTab(tab === "similar" ? "similar" : "details")
+            : setDetailTab(tab)
+        }
+        onClose={() => setPopupOpen(false)}
+        renderTab={(tab) =>
+          webInspectorActive
+            ? renderWebInspectorTab(tab === "similar" ? "similar" : "details")
+            : renderInspectorTab(tab, true)
+        }
+        onOpenSearch={
+          webInspectorActive
+            ? undefined
+            : () => {
+                if (!selected) return;
+                setPopupOpen(false);
+                navigate("/recommendations", {
+                  state: { graphPaperId: selected.id, searchTab: "connections" },
+                });
+              }
+        }
+      />
+
       <RetroDialog
         open={confirm !== null}
         title={confirm?.title ?? ""}
         size="md"
+        elevated
         confirmLabel="Delete"
         cancelLabel="Cancel"
         onCancel={() => setConfirm(null)}

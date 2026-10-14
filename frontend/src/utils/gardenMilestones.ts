@@ -38,3 +38,32 @@ export function milestonesCrossed(
     (a, b) => a.at - b.at || (a.kind === b.kind ? 0 : a.kind === "knowledge" ? -1 : 1),
   );
 }
+
+/**
+ * The cheat words a rise from `before` to `after` unlocks, each paired with
+ * the word at its OWN position on the ladder. (Indexing the filtered list
+ * instead pairs a 450 ft crossing with the 250 ft word whenever the lower
+ * rung was not crossed in the same step.) Rungs with no word come back with
+ * an empty string.
+ */
+export function cheatsCrossed(
+  before: number,
+  after: number,
+  heights: readonly number[],
+  set: readonly { word: string; effect: string }[],
+): { height: number; index: number; word: string; effect: string }[] {
+  const out: { height: number; index: number; word: string; effect: string }[] = [];
+
+  heights.forEach((height, index) => {
+    if (height > before && height <= after) {
+      out.push({
+        height,
+        index,
+        word: set[index]?.word ?? "",
+        effect: set[index]?.effect ?? "",
+      });
+    }
+  });
+
+  return out;
+}

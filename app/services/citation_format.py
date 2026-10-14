@@ -9,11 +9,13 @@ matching reference list for the sources the answer actually cites.
 Styles are the ones offered in Settings (APA 7, MLA 9, Chicago, IEEE).
 Reference entries mirror `citationParts()` in
 frontend/src/utils/citationStyles.ts on purpose, so a reference in the chat
-reads exactly like the "Copy as" output for the same paper (the repository
-keeps one author string per paper, so entries are title-level there too).
-In-text forms need surnames, which `surnames()` extracts from that string.
-The one departure from Copy-as: an entry lists at most MAX_LISTED_AUTHORS
-authors and then says "et al." (collaboration papers have hundreds).
+reads exactly like the "Copy as" output for the same paper (entries are
+title-level: the repository stores no journal or venue).
+Authors are structured (given / middle / family, see author_names.py), so
+each style writes them its own way -- APA "Smith, J. M., & Doe, J.", MLA
+"Smith, John Michael, and Jane Doe", IEEE "J. M. Smith and J. Doe" -- and
+applies its own et-al. rule (collaboration papers list hundreds).
+In-text forms use the family names.
 
 Chicago is rendered author-date in text; its entries keep the Settings
 layout (`Author. "Title." Year.`) rather than moving the year after the
@@ -22,6 +24,16 @@ author, so they stay identical to Copy-as.
 
 import re
 from typing import Literal, Sequence
+
+from app.services.author_names import (
+    AuthorName,
+    family_names,
+    format_apa,
+    format_chicago,
+    format_ieee,
+    format_mla,
+    parse_author_list,
+)
 
 CitationStyle = Literal["apa", "mla", "chicago", "ieee"]
 
@@ -34,104 +46,62 @@ REFERENCE_HEADINGS = {
 
 SHORT_TITLE_WORDS = 4
 
-# Collaboration papers list hundreds of authors; a reference entry keeps the
-# first few and says "et al." (the one deliberate departure from Copy-as).
-MAX_LISTED_AUTHORS = 10
-
-_CORPORATE = re.compile(
-    r"\b(collaboration|consortium|group|team|committee|organi[sz]ation|"
-    r"association|institute|university|society|council|agency|commission)\b",
-    re.I,
-)
-
-_PARTICLES = {
-    "van", "von", "de", "der", "den", "da", "di", "del", "della", "la",
-    "le", "du", "dos", "das", "bin", "ibn", "al", "el", "ter", "ten",
-    "op", "zu", "zur",
-}
-
 # "[1]", "[1, 3]", "[2-4]", "[2–4]" — the chat's own source numbers.
 _MARKER = re.compile(r"\[\s*(\d+(?:\s*[,–\-]\s*\d+)*)\s*\]")
 
 
 # ------------------------------------------------------------------
 # Authors
+#
+# Names are structured (given / middle / family) -- see
+# app.services.author_names. A source that carries ``authors`` parts
+# (a repository paper) uses them as stored; one with only the legacy
+# ``author`` string (a web hit) has that string parsed.
 # ------------------------------------------------------------------
 
 
-def _surname_of(part: str) -> str | None:
-    part = part.strip(" ,")
+def author_names(source) -> list[AuthorName]:
+    """The source's authors as structured names, in author order."""
 
-    if not part:
-        return None
+    parts = getattr(source, "authors", None)
 
-    if _CORPORATE.search(part):
-        return part
+    if parts:
+        names = []
 
-    if "," in part:
-        surname = part.split(",")[0].strip()
+        for part in parts:
+            get = (
+                part.get
+                if isinstance(part, dict)
+                else lambda key, default="": getattr(part, key, default)
+            )
+            name = AuthorName(
+                get("given", "") or "",
+                get("middle", "") or "",
+                get("family", "") or "",
+                get("suffix", "") or "",
+            )
 
-        if len(surname) > 1 and surname.isupper():
-            surname = surname.title()
+            if name.family or name.given:
+                names.append(name)
 
-        return surname or None
+        if names:
+            return names
 
-    tokens = part.split()
-    index = len(tokens) - 1
-
-    while index > 0 and tokens[index - 1].lower() in _PARTICLES:
-        index -= 1
-
-    return " ".join(tokens[index:])
-
-
-def _split_comma_list(text: str) -> list[str]:
-    """'A B, C D, E F' (first-last names) or 'Last, First, Last, First'."""
-
-    segments = [s.strip() for s in text.split(",") if s.strip()]
-
-    if all(len(s.split()) >= 2 for s in segments):
-        return segments
-
-    return [
-        ", ".join(segments[i : i + 2]) for i in range(0, len(segments), 2)
-    ]
-
-
-def _split_authors(author: str | None) -> tuple[list[str], str]:
-    """Raw author parts plus the joiner that reassembles them."""
-
-    text = re.sub(r"\s+", " ", author or "").strip().strip(",;")
-
-    if not text:
-        return [], ""
-
-    if ";" in text:
-        parts, joiner = text.split(";"), "; "
-    elif re.search(r"\s(?:and|&)\s", text):
-        parts, joiner = [], " and "
-
-        for chunk in re.split(r"\s+(?:and|&)\s+", text):
-            chunk = chunk.strip(" ,")
-
-            if chunk.count(",") >= 2:
-                parts.extend(_split_comma_list(chunk))
-            else:
-                parts.append(chunk)
-    elif text.count(",") >= 2:
-        parts, joiner = _split_comma_list(text), ", "
-    else:
-        parts, joiner = [text], ""
-
-    return [part.strip(" ,") for part in parts if part.strip(" ,")], joiner
+    return parse_author_list(getattr(source, "author", None))
 
 
 def surnames(author: str | None) -> list[str]:
-    """Best-effort surnames from the repository's free-form author string."""
+    """Family names from a free-form author string."""
 
-    parts, _ = _split_authors(author)
+    return family_names(parse_author_list(author))
 
-    return [name for name in map(_surname_of, parts) if name]
+
+_STYLE_FORMATTERS = {
+    "apa": format_apa,
+    "mla": format_mla,
+    "chicago": format_chicago,
+    "ieee": format_ieee,
+}
 
 
 # ------------------------------------------------------------------
@@ -165,18 +135,21 @@ def _year(source) -> str:
     return str(source.year) if getattr(source, "year", None) else "n.d."
 
 
-def _names(source) -> str:
-    raw = (getattr(source, "author", None) or "").strip()
+def _names(style: str, source) -> str:
+    """The author block, formatted the way ``style`` writes it."""
 
-    if not raw:
+    names = author_names(source)
+
+    if not names:
         return "Unknown author"
 
-    parts, joiner = _split_authors(raw)
+    return _STYLE_FORMATTERS[style](names)
 
-    if len(parts) > MAX_LISTED_AUTHORS:
-        return joiner.join(parts[:MAX_LISTED_AUTHORS]) + " et al."
 
-    return raw
+def _end(text: str) -> str:
+    """``text`` ending in exactly one full stop ("et al." keeps its own)."""
+
+    return text if text.endswith(".") else f"{text}."
 
 
 def _work(source) -> str:
@@ -189,7 +162,7 @@ def reference_entry(
     include_doi: bool = True,
     number: int | None = None,
 ) -> str:
-    names = _names(source)
+    names = _names(style, source)
     when = _year(source)
     work = _work(source)
     doi = _doi_suffix(style, getattr(source, "doi", None), include_doi)
@@ -201,7 +174,7 @@ def reference_entry(
     if style in ("mla", "chicago"):
         shown = work if standalone else f'"{work}"'
 
-        return f"{names}. {shown}. {when}.{doi}"
+        return f"{_end(names)} {shown}. {when}.{doi}"
 
     prefix = f"[{number}] " if number is not None else ""
 
@@ -223,7 +196,7 @@ def _short_title(source) -> str:
 
 
 def _in_text_part(style: str, source) -> str:
-    names = surnames(getattr(source, "author", None))
+    names = family_names(author_names(source))
     when = _year(source)
     count = len(names)
 
@@ -258,7 +231,7 @@ def _in_text_part(style: str, source) -> str:
 
 
 def _sort_key(source) -> tuple[str, str]:
-    names = surnames(getattr(source, "author", None))
+    names = family_names(author_names(source))
     lead = names[0] if names else _short_title(source)
 
     return (lead.lower(), _year(source))

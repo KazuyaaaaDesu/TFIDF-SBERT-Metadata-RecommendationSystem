@@ -7,7 +7,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { milestonesCrossed } from "../src/utils/gardenMilestones.ts";
+import {
+  cheatsCrossed,
+  milestonesCrossed,
+} from "../src/utils/gardenMilestones.ts";
 
 const KNOWLEDGE = [100, 300, 1000];
 const CHEATS = [250, 650, 1000];
@@ -62,4 +65,46 @@ test("indexes follow each ladder", () => {
     found.filter((m) => m.kind === "knowledge").map((m) => m.index),
     [0, 1, 2],
   );
+});
+
+/* ---- cheatsCrossed: the word that unlocks is the one at its own rung ---- */
+
+const SET = [
+  { word: "first", effect: "the first charm" },
+  { word: "second", effect: "the second charm" },
+  { word: "third", effect: "the third charm" },
+];
+const LADDER = [250, 450, 650];
+const unlocked = (before, after, set = SET) =>
+  cheatsCrossed(before, after, LADDER, set).map(
+    (m) => `${m.height}:${m.word}`,
+  );
+
+test("a single rung crossed alone brings its OWN word, not the lowest", () => {
+  /* Indexing the filtered list instead of the ladder paired the 450 ft
+     crossing with the 250 ft word. */
+  assert.deepEqual(unlocked(300, 460), ["450:second"]);
+  assert.deepEqual(unlocked(460, 700), ["650:third"]);
+});
+
+test("a big jump reports every rung lowest first, each with its own word", () => {
+  assert.deepEqual(unlocked(0, 1000), [
+    "250:first",
+    "450:second",
+    "650:third",
+  ]);
+});
+
+test("standing on a rung, shrinking, resetting or a bad height fires nothing", () => {
+  assert.deepEqual(unlocked(250, 251), []);
+  assert.deepEqual(unlocked(700, 0), []);
+  assert.deepEqual(unlocked(500, 500), []);
+  assert.deepEqual(unlocked(Number.NaN, 500), []);
+});
+
+test("a rung with no word comes back empty rather than borrowing one", () => {
+  const short = SET.slice(0, 1);
+
+  assert.deepEqual(unlocked(0, 700, short), ["250:first", "450:", "650:"]);
+  assert.deepEqual(unlocked(0, 700, []), ["250:", "450:", "650:"]);
 });

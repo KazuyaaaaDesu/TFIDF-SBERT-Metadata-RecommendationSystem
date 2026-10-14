@@ -109,7 +109,7 @@ export default function GardenAlmanac({
   );
 
   return (
-    <div className="flex flex-col gap-3 text-[#2b1a0a]">
+    <div className="flex flex-col gap-3 text-[color:var(--gm-ink)]">
       <div role="tablist" aria-label="Almanac pages" className="flex gap-1.5">
         {(
           [
@@ -169,8 +169,8 @@ export default function GardenAlmanac({
                     <span
                       className={`grid h-7 w-7 shrink-0 place-items-center rounded border-[2px] ${
                         unlocked
-                          ? "border-[#2a190b] bg-[#2d1b0d] text-[#f3d9a0]"
-                          : "border-[#2a190b] bg-[#3a2410] text-[#e9d3a6]"
+                          ? "border-[color:var(--gm-edge)] bg-[var(--gm-inset)] text-[color:var(--gm-label)]"
+                          : "border-[color:var(--gm-edge)] bg-[var(--gm-peg)] text-[color:var(--gm-locked-text)]"
                       }`}
                     >
                       {unlocked ? (
@@ -213,7 +213,7 @@ export default function GardenAlmanac({
                       </p>
                       <div
                         aria-hidden="true"
-                        className="mt-1 h-2 overflow-hidden rounded border-[2px] border-[#20120a] bg-[#2d1b0d]"
+                        className="mt-1 h-2 overflow-hidden rounded border-[2px] border-[color:var(--gm-edge2)] bg-[var(--gm-inset)]"
                       >
                         <div
                           className="h-full bg-[#e0a03c]"
@@ -270,7 +270,7 @@ export default function GardenAlmanac({
               value={word}
               onChange={(event) => setWord(event.target.value)}
               placeholder="e.g. a cheat word"
-              className="min-h-8 min-w-0 flex-1 rounded border-[3px] border-[#2a190b] bg-[#2d1b0d] px-2 font-mono text-[12px] text-[#f6e3bd] placeholder:text-[#f6e3bd]/60"
+              className="min-h-8 min-w-0 flex-1 rounded border-[3px] border-[color:var(--gm-edge)] bg-[var(--gm-inset)] px-2 font-mono text-[12px] text-[color:var(--gm-text)] placeholder:text-[color:var(--gm-text)]/60"
             />
             <button
               type="submit"

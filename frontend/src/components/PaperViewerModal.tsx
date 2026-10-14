@@ -4,7 +4,9 @@ import {
   getPaperPdfUrl,
   updatePaper,
 } from "../api";
-import type { Paper } from "../api";
+import type { AuthorPart, Paper } from "../api";
+import AuthorsEditor from "./AuthorsEditor";
+import { paperAuthors } from "../utils/authorNames.ts";
 import FindPdfPanel from "./FindPdfPanel";
 import MathText from "./MathText";
 import {
@@ -111,6 +113,8 @@ export default function PaperViewerModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPaper, setCurrentPaper] = useState<Paper | null>(paper);
+  /* Authors are edited as given / middle / family parts, not one string. */
+  const [authors, setAuthors] = useState<AuthorPart[]>([]);
 
   const [form, setForm] = useState<PaperForm>({
     title: "",
@@ -155,6 +159,7 @@ export default function PaperViewerModal({
     }
 
     setForm(formFromPaper(paper));
+    setAuthors(paperAuthors(paper));
     setEditing(false);
     setError(null);
   }, [paper]);
@@ -234,7 +239,15 @@ export default function PaperViewerModal({
     try {
       const updatedPaper = await updatePaper(currentPaper.id, {
         title: form.title.trim() || undefined,
-        author: form.author.trim() || undefined,
+        // Structured parts; the server rebuilds the display string.
+        authors: authors
+          .map((a) => ({
+            given: a.given.trim(),
+            middle: a.middle.trim(),
+            family: a.family.trim(),
+            suffix: a.suffix.trim(),
+          }))
+          .filter((a) => a.given || a.middle || a.family),
         abstract: form.abstract.trim() || undefined,
         keywords: form.keywords.trim() || undefined,
         publication_year: form.publication_year.trim()
@@ -271,6 +284,7 @@ export default function PaperViewerModal({
     }
 
     setForm(formFromPaper(currentPaper));
+    setAuthors(paperAuthors(currentPaper));
     setEditing(false);
     setError(null);
   };
@@ -494,7 +508,13 @@ export default function PaperViewerModal({
                           {field.label}
                         </label>
 
-                        {editing ? (
+                        {editing && field.key === "author" ? (
+                          <AuthorsEditor
+                            value={authors}
+                            onChange={setAuthors}
+                            disabled={saving}
+                          />
+                        ) : editing ? (
                           field.control === "textarea" ? (
                             <textarea
                               id={inputId}

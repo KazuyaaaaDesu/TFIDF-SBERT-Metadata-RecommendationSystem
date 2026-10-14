@@ -21,7 +21,8 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy import event
+from sqlalchemy.orm import Session, attributes, relationship, declarative_base
 
 
 Base = declarative_base()
@@ -275,11 +276,132 @@ class Paper(Base):
         cascade="all, delete-orphan",
     )
 
+    # The author list as given / middle / family parts. ``author`` stays
+    # as a derived display string; see PaperAuthor and the before_flush
+    # hook below, which keep the two in step.
+    authors = relationship(
+        "PaperAuthor",
+        back_populates="paper",
+        cascade="all, delete-orphan",
+        order_by="PaperAuthor.position",
+        lazy="selectin",
+    )
+
     def __repr__(self):
         return (
             f"<Paper id={self.id} "
             f"title={self.title[:40]!r}>"
         )
+
+
+class PaperAuthor(Base):
+    """One author of a paper, as the parts a citation style needs.
+
+    APA wants "Family, G. M.", MLA "Family, Given Middle", IEEE
+    "G. M. Family", BibTeX "Family, Given Middle". None of those can be
+    rebuilt reliably from a flattened display string, so each author is
+    stored as given / middle / family (+ a generational suffix such as
+    "Jr."). A corporate author ("ATLAS Collaboration") is one unsplit
+    family value with empty given and middle.
+
+    ``position`` is the author order (0 = first author); order is part
+    of the data in a citation.
+    """
+
+    __tablename__ = "paper_authors"
+
+    # No unique (paper_id, position): replacing a paper's author list
+    # inserts the new rows before the old ones are deleted, and a
+    # uniqueness rule would reject that intermediate state.
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    paper_id = Column(
+        Integer,
+        ForeignKey("papers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    position = Column(Integer, nullable=False, default=0)
+
+    given = Column(String(120), nullable=False, default="")
+    middle = Column(String(120), nullable=False, default="")
+    family = Column(String(200), nullable=False, default="")
+    suffix = Column(String(20), nullable=False, default="")
+
+    paper = relationship("Paper", back_populates="authors")
+
+    def to_name(self):
+        from app.services.author_names import AuthorName
+
+        return AuthorName(
+            self.given or "",
+            self.middle or "",
+            self.family or "",
+            self.suffix or "",
+        )
+
+    def __repr__(self):
+        return (
+            f"<PaperAuthor paper={self.paper_id} #{self.position} "
+            f"{self.family!r}, {self.given!r}>"
+        )
+
+
+def _author_rows(names) -> list:
+    return [
+        PaperAuthor(
+            position=index,
+            given=name.given[:120],
+            middle=name.middle[:120],
+            family=name.family[:200],
+            suffix=name.suffix[:20],
+        )
+        for index, name in enumerate(names)
+    ]
+
+
+@event.listens_for(Session, "before_flush")
+def _keep_authors_in_step(session, flush_context, instances):
+    """Keep ``Paper.author`` (display string) and ``Paper.authors``
+    (structured parts) describing the same people, whichever one a
+    caller changed.
+
+      - parts edited  -> the display string is rebuilt from them
+      - string edited -> the parts are re-parsed from it
+
+    Every code path that sets ``paper.author`` (upload, import,
+    enrichment, the edit endpoint) therefore gets structured authors
+    without being touched. If both change in one flush, the parts win:
+    they are the more precise of the two.
+    """
+
+    from app.services.author_names import display_string, parse_author_list
+
+    # The backfill structures existing strings without rewriting them.
+    if session.info.get("skip_author_sync"):
+        return
+
+    for obj in list(session.new) + list(session.dirty):
+        if not isinstance(obj, Paper):
+            continue
+
+        parts_changed = attributes.get_history(obj, "authors").has_changes()
+        string_changed = attributes.get_history(obj, "author").has_changes()
+
+        if parts_changed:
+            ordered = list(obj.authors)
+
+            for index, row in enumerate(ordered):
+                row.position = index
+
+            text = display_string([row.to_name() for row in ordered]) or None
+
+            if obj.author != text:
+                obj.author = text
+        elif string_changed:
+            obj.authors = _author_rows(parse_author_list(obj.author))
 
 
 class PersonalLibrary(Base):
@@ -343,6 +465,20 @@ class BattleRun(Base):
 
     Records which pipeline won the run (by independence-weighted
     consensus) so the frontend can tally wins over time.
+
+    The first nine columns are the original win-summary log. The
+    columns below them are the research log added when the Arena
+    campaign was scheduled: they capture the run's identity (label,
+    subject class, query kind), the knobs it was run with, the
+    corpus it ran against, and -- in ``response_json`` -- the entire
+    CompareResponse. Before that column existed, the consensus votes,
+    per-pipeline ranks, and pairwise overlaps were computed, returned
+    to the browser, and then discarded, which left the agreement
+    structure the evaluation chapter reports on unrecoverable.
+
+    Nothing here changes how a battle is computed. These columns are
+    written once, after the winner has been picked, from values the
+    run already had.
     """
 
     __tablename__ = "battle_runs"
@@ -379,12 +515,211 @@ class BattleRun(Base):
         index=True,
     )
 
+    # ---------------------------------------------------------
+    # Research log (added for the Arena campaign)
+    # ---------------------------------------------------------
+
+    run_label = Column(
+        String(200),
+        nullable=True,
+    )
+    # Free text naming the run, e.g. "campaign-ml-text-5". This is
+    # the ONLY thing separating a formal campaign run from a
+    # development walkthrough, so it has to be captured at the moment
+    # the run happens -- there is no way to reconstruct it later from
+    # the query string.
+    #
+    # Suggested namespaces (not enforced): "campaign-*" formal,
+    # "dev-*" walkthroughs, "demo-*". NULL on every pre-campaign row.
+
+    subject_class = Column(
+        String(100),
+        nullable=True,
+    )
+    # One of the campaign's six subject classes. Captured at run time
+    # because inferring it later means parsing query text by hand, and
+    # a mis-parsed class silently corrupts the per-class analysis.
+
+    query_kind = Column(
+        String(20),
+        nullable=True,
+        index=True,
+    )
+    # "text" or "seed". Already derivable from "query IS NULL", but
+    # the campaign splits its results by query kind and a derived
+    # column cannot be indexed or grouped on comfortably in an export.
+    # Backfilled from `query` by the migration; both agree.
+
+    mmr_lambda = Column(
+        Float,
+        nullable=True,
+    )
+    mmr_pool = Column(
+        Integer,
+        nullable=True,
+    )
+    # Diversification knobs, set only when MMR actually ran. NULL on a
+    # plain Arena battle, which never passes them.
+
+    custom_weights = Column(
+        Text,
+        nullable=True,
+    )
+    # JSON object, e.g. {"tfidf": 0.1, "sbert": 0.9, "metadata": 0.0}.
+    # Set only when a seventh "custom" pipeline joined the battle, so
+    # a recipe experiment can be told apart from the six presets.
+
+    response_json = Column(
+        Text,
+        nullable=True,
+    )
+    # The entire CompareResponse, JSON-encoded: per-pipeline ranked
+    # lists with scores, the consensus entries with vote counts and
+    # average ranks, and every pairwise overlap and mean rank gap.
+    # This is the column that makes a past run analysable; the winner
+    # columns above are only its summary line.
+
+    corpus_size = Column(
+        Integer,
+        nullable=True,
+    )
+    # How many papers were valid for recommendation at run time. A
+    # run's win share means nothing without knowing what it was chosen
+    # from, and the corpus drifts as papers are added or re-validated.
+
+    corpus_version = Column(
+        String(100),
+        nullable=True,
+    )
+    # Short fingerprint of the corpus state behind this run: valid
+    # paper count, the newest paper update, and the vector index
+    # version, hashed together. Lets two runs be compared only when
+    # they actually saw the same corpus.
+
+    # ---------------------------------------------------------
+    # Verdict honesty and judging
+    #
+    # margin / decisive: how far the consensus leader cleared the
+    # runner-up, and whether that clears MIN_DECISIVE_MARGIN. NULL on
+    # runs recorded before this existed (and on runs that kept no
+    # response_json to recompute it from).
+    #
+    # judged_*: quality against ground truth. A seed-paper battle is
+    # scored against that paper's own references ("references"); a text
+    # battle can be scored by a person ticking relevant results blind
+    # ("human"). judgement_json holds the per-pipeline scores and the
+    # relevance judgments themselves, so the numbers can be re-derived.
+    # ---------------------------------------------------------
+    margin = Column(Float, nullable=True)
+    decisive = Column(Boolean, nullable=True, index=True)
+    judged_basis = Column(String(16), nullable=True, index=True)
+    judged_leader = Column(String(50), nullable=True)
+    judgement_json = Column(Text, nullable=True)
+
     def __repr__(self):
         return (
             f"<BattleRun id={self.id} "
             f"winner={self.winner_pipeline_id!r} "
             f"created_at={self.created_at}>"
         )
+
+
+class TournamentRun(Base):
+    """One statistically analysed pipeline tournament.
+
+    Unlike ``BattleRun`` (a single query, a consensus winner and no
+    uncertainty), a tournament scores every pipeline on many queries
+    against ground-truth relevance and stores the verdict of the
+    paired tests (``result_json``: ranking with CIs, omnibus test,
+    pairwise matrix, tie groups). The per-query scores live in
+    ``tournament_query_scores`` so any later analysis can be re-run.
+    """
+
+    __tablename__ = "tournament_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    kind = Column(String(32), nullable=False, default="loo_citations")
+    label = Column(String(120), nullable=True)
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        index=True,
+    )
+
+    primary_metric = Column(String(32), nullable=False)
+    top_k = Column(Integer, nullable=False)
+    n_queries = Column(Integer, nullable=False)
+    dropped_queries = Column(Integer, nullable=False, default=0)
+    min_refs = Column(Integer, nullable=True)
+    seed = Column(Integer, nullable=False)
+    pipelines = Column(Text, nullable=False)
+    # JSON list of pipeline ids, in the order they were run.
+
+    outcome = Column(String(16), nullable=False, index=True)
+    # "winner" | "tie" | "inconclusive" while finished; "pending" until then.
+    winner_pipeline_id = Column(String(50), nullable=True)
+
+    result_json = Column(Text, nullable=False, default="{}")
+    corpus_size = Column(Integer, nullable=True)
+    corpus_version = Column(String(64), nullable=True)
+
+    # ---------------------------------------------------------
+    # Durable-run bookkeeping
+    #
+    # A tournament takes minutes, so it runs in the background and is
+    # saved as it goes: each query's scores are committed as soon as
+    # they exist. A laptop that sleeps, a page that reloads or a server
+    # that restarts therefore loses nothing -- the run is picked up from
+    # the next unscored query.
+    #
+    #   status          running | done | interrupted | error
+    #   progress_done   queries finished (scored or dropped)
+    #   progress_total  queries chosen for this run
+    #   settings_json   everything needed to resume: pipelines, top_k,
+    #                   metric, seed, alpha, resamples, min_refs, custom
+    #                   weights and the chosen query paper ids
+    #   busy_seconds    time actually spent scoring (not wall clock, so
+    #                   a sleep does not wreck the time estimate)
+    # ---------------------------------------------------------
+    status = Column(String(16), nullable=False, default="done", index=True)
+    progress_done = Column(Integer, nullable=False, default=0)
+    progress_total = Column(Integer, nullable=False, default=0)
+    settings_json = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    busy_seconds = Column(Float, nullable=False, default=0.0)
+    finished_at = Column(DateTime, nullable=True)
+
+    def __repr__(self):
+        return (
+            f"<TournamentRun id={self.id} outcome={self.outcome!r} "
+            f"winner={self.winner_pipeline_id!r} n={self.n_queries}>"
+        )
+
+
+class TournamentQueryScore(Base):
+    """One pipeline's scores on one query of a tournament."""
+
+    __tablename__ = "tournament_query_scores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    run_id = Column(
+        Integer,
+        ForeignKey("tournament_runs.id"),
+        nullable=False,
+        index=True,
+    )
+    pipeline_id = Column(String(50), nullable=False)
+    seed_paper_id = Column(Integer, nullable=False)
+    num_relevant = Column(Integer, nullable=False)
+
+    ndcg = Column(Float, nullable=False)
+    mrr = Column(Float, nullable=False)
+    recall = Column(Float, nullable=False)
+    hit = Column(Float, nullable=False)
 
 
 class PaperCitation(Base):
@@ -577,3 +912,57 @@ class SiteSetting(Base):
 
     def __repr__(self):
         return f"<SiteSetting key={self.key!r}>"
+
+# ============================================================
+# LIBRARY FOLDERS
+# ============================================================
+
+class LibraryFolder(Base):
+    """A folder in a user's library, optionally inside another folder.
+
+    A paper can sit in several folders (like Zotero collections); the
+    folder only organises the library, it never owns or deletes a paper.
+    Sibling names are unique ignoring case, enforced in
+    ``app/services/library_folders.py`` (a UNIQUE constraint would not
+    cover root folders, whose parent is NULL).
+    """
+
+    __tablename__ = "library_folders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    user_id = Column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+
+    parent_id = Column(
+        Integer, ForeignKey("library_folders.id"), nullable=True, index=True
+    )
+
+    name = Column(String(80), nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class LibraryFolderPaper(Base):
+    """A saved paper placed in a folder."""
+
+    __tablename__ = "library_folder_papers"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "folder_id", "paper_id", name="uq_folder_paper"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    folder_id = Column(
+        Integer, ForeignKey("library_folders.id"), nullable=False, index=True
+    )
+
+    paper_id = Column(
+        Integer, ForeignKey("papers.id"), nullable=False, index=True
+    )
+
+    added_at = Column(DateTime, default=datetime.utcnow, nullable=False)

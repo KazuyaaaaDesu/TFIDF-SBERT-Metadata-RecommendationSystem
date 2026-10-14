@@ -65,10 +65,10 @@ export default {
         math: "rgb(var(--tag-math) / <alpha-value>)",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["var(--font-body, Inter)", "system-ui", "sans-serif"],
         // Pixel/Inter combination: the retro (mono) layer renders
         // in Pixelify Sans; Inter handles the body/UI text.
-        mono: ["Pixelify Sans", "JetBrains Mono", "ui-monospace", "monospace"],
+        mono: ["var(--font-display, Pixelify Sans)", "JetBrains Mono", "ui-monospace", "monospace"],
       },
     },
   },

@@ -703,3 +703,117 @@ def clustered_works(
         return entries[:limit]
 
     return finalize(grouped["cites"]), finalize(grouped["cited_by"])
+
+
+OPENALEX_DOI_BATCH = 50
+
+
+def gathered_work_map(db: Session) -> dict[str, int]:
+    """OpenAlex work id -> local paper id for papers imported by the
+    literature gather, which records its source as ``openalex:W...``.
+    Exact and free: no network needed to know these papers' ids."""
+
+    mapping: dict[str, int] = {}
+
+    for paper_id, source in (
+        db.query(Paper.id, Paper.source_filename)
+        .filter(Paper.source_filename.like("openalex:W%"))
+        .all()
+    ):
+        work_id = _normalize_work_id(source.split(":", 1)[1])
+
+        if work_id:
+            mapping[work_id] = paper_id
+
+    return mapping
+
+
+def link_reference_rows(db: Session, fetch=None) -> dict:
+    """
+    Resolve cached citation rows to local papers by OpenAlex work id.
+
+    ``referenced_works`` come back as bare OpenAlex ids with no DOI, so
+    a "cites" row can never be matched by DOI the way a "cited_by" row
+    can, and ``matched_paper_id`` stays NULL for every reference. That
+    leaves nothing to treat as ground truth: no paper has a resolved
+    reference list, so leave-one-out tournaments have no queries.
+
+    The work ids come from two places. Papers imported by the
+    literature gather carry theirs in ``source_filename`` (free). For
+    every other local paper with a DOI, OpenAlex is asked for the id
+    (batched, ``filter=doi:a|b|c``). Every row -- either direction --
+    whose ``external_work_id`` is one of those ids gets its
+    ``matched_paper_id``. Rows already matched are left alone, so it
+    is safe to re-run.
+
+    Network trouble on one batch skips that batch and reports it;
+    nothing raises. ``fetch`` is injectable like
+    ``refresh_paper_citations``.
+    """
+
+    fetch = fetch or _default_fetch
+    work_to_paper: dict[str, int] = dict(gathered_work_map(db))
+    known_papers = set(work_to_paper.values())
+    doi_map = {
+        doi: paper_id
+        for doi, paper_id in _local_doi_map(db).items()
+        if paper_id not in known_papers
+    }
+    failed_batches = 0
+    dois = sorted(doi_map)
+
+    for start in range(0, len(dois), OPENALEX_DOI_BATCH):
+        batch = dois[start : start + OPENALEX_DOI_BATCH]
+        url = (
+            f"{OPENALEX_WORK_BASE}?filter=doi:{'|'.join(batch)}"
+            f"&select=id,doi&per-page={OPENALEX_DOI_BATCH}"
+        )
+
+        try:
+            page = fetch(url)
+        except Exception:
+            failed_batches += 1
+            continue
+
+        for entry in (page or {}).get("results") or []:
+            work_id = _normalize_work_id(entry.get("id"))
+            paper_id = doi_map.get(normalize_doi(entry.get("doi")) or "")
+
+            if work_id and paper_id is not None:
+                work_to_paper[work_id] = paper_id
+
+    linked = 0
+
+    work_ids = list(work_to_paper)
+
+    # Chunked: an IN list over thousands of ids can exceed SQLite's
+    # bound-variable limit on older builds.
+    for start in range(0, len(work_ids), 500):
+        rows = (
+            db.query(PaperCitation)
+            .filter(PaperCitation.matched_paper_id.is_(None))
+            .filter(
+                PaperCitation.external_work_id.in_(
+                    work_ids[start : start + 500]
+                )
+            )
+            .all()
+        )
+
+        for row in rows:
+            target = work_to_paper[row.external_work_id]
+
+            # A paper citing itself is a data glitch, not a reference.
+            if target != row.paper_id:
+                row.matched_paper_id = target
+                linked += 1
+
+    db.commit()
+
+    return {
+        "ok": failed_batches == 0,
+        "local_papers_with_doi": len(dois),
+        "work_ids_found": len(work_to_paper),
+        "rows_linked": linked,
+        "failed_batches": failed_batches,
+    }

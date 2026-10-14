@@ -633,6 +633,29 @@ def complete_paper_manually(
         if field in allowed_fields:
             setattr(paper, field, value)
 
+    # A structured author edit (given / middle / family). The model's
+    # flush hook rebuilds the display string from these parts, and they
+    # win over a plain ``author`` sent in the same request.
+    if updates.get("authors") is not None:
+        from app.models.models import _author_rows
+        from app.services.author_names import AuthorName
+
+        names = [
+            AuthorName(
+                (part.get("given") if isinstance(part, dict) else part.given) or "",
+                (part.get("middle") if isinstance(part, dict) else part.middle) or "",
+                (part.get("family") if isinstance(part, dict) else part.family) or "",
+                (part.get("suffix") if isinstance(part, dict) else part.suffix) or "",
+            )
+            for part in updates["authors"]
+        ]
+        names = [
+            AuthorName(*(piece.strip() for piece in (n.given, n.middle, n.family, n.suffix)))
+            for n in names
+            if (n.given or n.middle or n.family).strip()
+        ]
+        paper.authors = _author_rows(names)
+
     # ---------------------------------------------------------
     # Re-run classification after metadata changes
     # ---------------------------------------------------------

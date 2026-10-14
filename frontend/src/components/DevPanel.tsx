@@ -14,6 +14,8 @@
 
 import { useState } from "react";
 
+import "../pages/settings.css";
+
 import { CHARM_KINDS, PARTICLE_LAYERS, SCENE_LAYERS, charmsFor } from "../data/charms";
 import { BACKDROP_THEMES } from "../data/backdrops";
 import { SPECIES_STAGE_FERT, TREE_SPECIES, treeSpecies } from "../data/knowledge";
@@ -28,7 +30,17 @@ import {
   toggleSecret,
   useUiCustom,
 } from "../state/uiCustom";
-import { DEFAULT_UI_CUSTOM, UI_CUSTOM_EVENT, UI_CUSTOM_KEY } from "../utils/uiCustom";
+import {
+  CUSTOM_FONT,
+  DEFAULT_TYPE,
+  DEFAULT_UI_CUSTOM,
+  FONT_CHOICES,
+  TYPE_LIMITS,
+  UI_CUSTOM_EVENT,
+  UI_CUSTOM_KEY,
+  type FontSlot,
+  type TypeTweaks,
+} from "../utils/uiCustom";
 import { VARIANT_KEY, variantsFor } from "../utils/treeVariants";
 
 const STAGES = ["Seed", "Seedling", "Sapling", "Young", "Mature", "Giant", "Ancient"];
@@ -64,27 +76,102 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded border-[3px] border-gray-900 bg-white px-3 py-2">
-      <div className="min-w-0">
-        <p className="font-mono text-[11px] font-bold uppercase tracking-wide text-ink">{title}</p>
-        {note && <p className="text-xs leading-5 text-muted">{note}</p>}
+    <div className="set-row set-row-nolamp">
+      <div className="set-label">
+        <p className="set-label-t">{title}</p>
+        {note && <p className="set-label-n">{note}</p>}
       </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
+      <div className="set-ctl">{children}</div>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded border-[3px] border-gray-900 bg-white p-4">
-      <h2 className="font-pixelify text-lg font-bold text-ink">{title}</h2>
-      <div className="mt-3 flex flex-col gap-2">{children}</div>
+    <section className="set-panel" data-set-section={title}>
+      <div className="set-panel-head">
+        <h2 className="font-pixelify text-lg font-bold text-ink">{title}</h2>
+      </div>
+      <div className="set-panel-body">{children}</div>
+      <div className="set-panel-foot" />
+      <div className="set-screws" />
     </section>
   );
 }
 
 const btn =
   "rounded border-[3px] border-gray-900 bg-white px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-ink transition-colors pixel-ease hover:bg-accentSoft";
+
+function FontRow({
+  title,
+  note,
+  slot,
+  onChange,
+}: {
+  title: string;
+  note: string;
+  slot: FontSlot;
+  onChange: (slot: FontSlot) => void;
+}) {
+  return (
+    <Row title={title} note={note}>
+      <select
+        aria-label={`${title} font`}
+        value={slot.id ?? ""}
+        onChange={(event) => onChange({ ...slot, id: event.target.value || null })}
+        className="rounded border-[3px] border-gray-900 bg-field px-2 py-1 font-mono text-[11px] text-ink"
+      >
+        <option value="">Site default</option>
+        {FONT_CHOICES.map((font) => (
+          <option key={font.id} value={font.id}>
+            {font.label}
+          </option>
+        ))}
+        <option value={CUSTOM_FONT}>Other (Google Fonts name)…</option>
+      </select>
+      {slot.id === CUSTOM_FONT && (
+        <input
+          aria-label={`${title} custom font name`}
+          value={slot.custom}
+          placeholder="e.g. Karla"
+          maxLength={60}
+          onChange={(event) => onChange({ ...slot, custom: event.target.value })}
+          className="w-32 rounded border-[3px] border-gray-900 bg-field px-2 py-1 font-mono text-[11px] text-ink"
+        />
+      )}
+    </Row>
+  );
+}
+
+function TypeSlider({
+  title,
+  note,
+  value,
+  limits,
+  format,
+  onChange,
+}: {
+  title: string;
+  note?: string;
+  value: number;
+  limits: { min: number; max: number; step: number };
+  format: (value: number) => string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <Row title={title} note={note}>
+      <input
+        type="range"
+        aria-label={title}
+        {...limits}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-32"
+      />
+      <span className="w-14 text-right font-mono text-xs text-ink">{format(value)}</span>
+    </Row>
+  );
+}
 
 function VariantRow({ species }: { species: string }) {
   const [id, set] = useTreeVariant(species);
@@ -115,6 +202,10 @@ export default function DevPanel({ garden = false }: { garden?: boolean }) {
   const [note, setNote] = useState("");
   const charms = charmsFor(sun.species);
   const ferts = SPECIES_STAGE_FERT[sun.species];
+
+  function setType(patch: Partial<TypeTweaks>) {
+    setUiCustom((c) => ({ ...c, type: { ...c.type, ...patch } }));
+  }
 
   function exportAll() {
     const read = (key: string) => {
@@ -209,6 +300,57 @@ export default function DevPanel({ garden = false }: { garden?: boolean }) {
         </div>
       </Section>
 
+      <Section title="Typography">
+        <FontRow
+          title="Body font"
+          note="Paragraphs, tables and chat text. Loaded from Google Fonts when picked."
+          slot={custom.type.body}
+          onChange={(body) => setType({ body })}
+        />
+        <FontRow
+          title="Header font"
+          note="Page and section headings, field labels, buttons and the retro labels."
+          slot={custom.type.heading}
+          onChange={(heading) => setType({ heading })}
+        />
+        <TypeSlider
+          title="Text size"
+          note="Scales the whole interface."
+          value={custom.type.scale}
+          limits={TYPE_LIMITS.scale}
+          format={(v) => `${Math.round(v * 100)}%`}
+          onChange={(scale) => setType({ scale })}
+        />
+        <TypeSlider
+          title="Letter spacing"
+          value={custom.type.tracking}
+          limits={TYPE_LIMITS.tracking}
+          format={(v) => `${v.toFixed(3)}em`}
+          onChange={(tracking) => setType({ tracking })}
+        />
+        <TypeSlider
+          title="Line height"
+          note="0 leaves each page's own."
+          value={custom.type.lineHeight}
+          limits={TYPE_LIMITS.lineHeight}
+          format={(v) => (v ? v.toFixed(2) : "auto")}
+          onChange={(lineHeight) => setType({ lineHeight })}
+        />
+        <p
+          className="rounded border-[3px] border-gray-900 bg-canvas p-3 text-sm leading-6 text-ink"
+          data-testid="type-sample"
+        >
+          <span className="font-pixelify text-lg font-bold">Header sample: Ranking papers by meaning</span>
+          <br />
+          Body sample: The quick brown fox jumps over the lazy dog. 0123456789 · nDCG@10 = 0.412 (95% CI 0.38–0.44)
+        </p>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <button type="button" className={btn} onClick={() => setType(DEFAULT_TYPE)}>
+            Reset typography
+          </button>
+        </div>
+      </Section>
+
       <Section title="Live scenery behind the app">
         <Row
           title="Look wallpapers"
@@ -250,7 +392,7 @@ export default function DevPanel({ garden = false }: { garden?: boolean }) {
             max={95}
             value={Math.round(custom.live.dim * 100)}
             onChange={(event) => setLive({ dim: Number(event.target.value) / 100 })}
-            className="w-32 accent-[#f39c18]"
+            className="w-32"
           />
           <span className="w-10 text-right font-mono text-xs text-ink">{Math.round(custom.live.dim * 100)}%</span>
         </Row>
@@ -350,7 +492,7 @@ export default function DevPanel({ garden = false }: { garden?: boolean }) {
             step={10}
             value={sun.fertilizer}
             onChange={(event) => sun.testSetFertilizer(Number(event.target.value))}
-            className="w-40 accent-[#f39c18]"
+            className="w-40"
           />
           <span className="w-12 text-right font-mono text-xs text-ink">{sun.fertilizer}</span>
         </Row>

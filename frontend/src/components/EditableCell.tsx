@@ -128,10 +128,9 @@ export default function EditableCell({
   return (
     <button
       type="button"
-      onClick={(event) => {
-        // Single click passes through so the table row still selects.
-        event.stopPropagation();
-      }}
+      // A single click is left alone so it bubbles to the table row, which
+      // selects the paper and opens the inspector. Only a double-click is
+      // taken here, to start editing.
       onDoubleClick={(event) => {
         event.stopPropagation();
         setEditing(true);

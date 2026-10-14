@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Pagination from "../components/retro/Pagination";
 import StaggerIn from "../components/retro/StaggerIn";
+import "./changelog.css";
 import { CHANGELOG, type ChangeTag, type ChangelogEntry } from "../data/changelog";
 
 /* ============================================================
@@ -111,8 +112,15 @@ function EntryCard({ entry }: { entry: ChangelogEntry }) {
 export default function Changelog() {
   const [view, setView] = useState<LayoutView>("timeline");
   const [page, setPage] = useState(1);
+  const [openIds, setOpenIds] = useState<Record<string, boolean>>(() => ({
+    [ENTRIES[0]?.id ?? ""]: true,
+  }));
   const pageCount = Math.max(1, Math.ceil(ENTRIES.length / PAGE_SIZE));
   const shown = ENTRIES.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function toggleEntry(id: string) {
+    setOpenIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
 
   function goTo(next: number) {
     setPage(Math.min(pageCount, Math.max(1, next)));
@@ -122,7 +130,7 @@ export default function Changelog() {
   }
 
   return (
-    <div id="changelog-top" className="mx-auto max-w-4xl">
+    <div id="changelog-top" className="chg-page mx-auto">
       {/* Header */}
       <div className="mb-8">
         <p className="text-sm font-bold text-muted">Release Notes</p>
@@ -171,46 +179,56 @@ export default function Changelog() {
       </div>
 
       {view === "timeline" ? (
-        /* ================= TIMELINE =================
-           Rail sits at x=10 (a 3px bar at left-[9px], centered 10.5).
-           Dot is left-[2px] at 17px wide, so it spans 2-19 and shares the
-           rail's center. Because the row has no horizontal padding on
-           sm+, the dot resolves against the same x-origin as the rail.
-
-           Mobile: content sits at pl-9 (36px), 17px clear of the dot.
-           sm+:    date is right-aligned in a 72px column starting at
-                   x=32 (ml-8), so "Sep 30" ends at x=104 — 45px clear of
-                   the dot. Content starts at x=128, 24px past the date.
-
-           The previous version pinned the rail at x=104 while the card
-           began at x=80, drawing the dot straight through the card. */
-        <div className="relative space-y-3 before:absolute before:top-3 before:bottom-3 before:left-[9px] before:w-[3px] before:bg-gray-900/15">
-          {shown.map((entry, index) => (
-            <StaggerIn
-              key={entry.id}
-              index={index}
-              className="group relative flex flex-col gap-1 pl-9 sm:flex-row sm:items-start sm:gap-0 sm:pl-0"
-            >
-              {/* date rail dot — centered on the rail at x=10.5 */}
-              <span
-                aria-hidden="true"
-                className="absolute top-[7px] left-[2px] h-[17px] w-[17px] rounded-full border-[3px] border-gray-900 bg-white transition-[transform,background-color] duration-150 pixel-ease group-hover:scale-110 group-hover:bg-accent"
-              />
-
-              {/* 72px date column, starting at x=32 */}
-              <p className="w-full shrink-0 font-mono text-xs font-bold text-muted sm:ml-8 sm:w-[72px] sm:shrink-0 sm:pt-[6px] sm:text-right">
-                {entry.date}
-              </p>
-
-              {/* content — clears the date column */}
-              <div className="min-w-0 flex-1 sm:pl-6">
-                <div className="rounded border-[3px] border-gray-900 bg-white px-4 py-3 transition-[transform,box-shadow] duration-100 pixel-ease group-hover:-translate-y-0.5 group-hover:shadow-[3px_3px_0_0_rgba(44,62,80,0.9)] group-focus-within:-translate-y-0.5 group-focus-within:shadow-[3px_3px_0_0_rgba(44,62,80,0.9)]">
-                  <EntryCard entry={entry} />
-                </div>
-              </div>
-            </StaggerIn>
-          ))}
-        </div>
+        <ol className="chg-spine">
+          {shown.map((entry, index) => {
+            const globalIndex = (page - 1) * PAGE_SIZE + index;
+            const isOpen = !!openIds[entry.id];
+            const isLatest = globalIndex === 0;
+            return (
+              <li key={entry.id} className="chg-item">
+                <StaggerIn index={index}>
+                  <div className="chg-row" data-open={isOpen} data-latest={isLatest}>
+                    <p className="chg-date">{entry.date}</p>
+                    <span className="chg-node" aria-hidden="true">
+                      v{ENTRIES.length - globalIndex}
+                    </span>
+                    <div className="chg-card">
+                      {isLatest && <span className="chg-latest">Latest</span>}
+                      <button
+                        type="button"
+                        onClick={() => toggleEntry(entry.id)}
+                        aria-expanded={isOpen}
+                        aria-controls={`${entry.id}-entry`}
+                        className="chg-head"
+                      >
+                        <span className="chg-title">{entry.title}</span>
+                        <span
+                          className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-[0.15em] ${TAG_STYLE[entry.tag]}`}
+                        >
+                          {entry.tag}
+                        </span>
+                        <span className="chg-chev" aria-hidden="true">&rsaquo;</span>
+                      </button>
+                      <div
+                        id={`${entry.id}-entry`}
+                        className={`grid transition-[grid-template-rows] duration-200 pixel-ease ${
+                          isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                        }`}
+                      >
+                        <div className="overflow-hidden">
+                          <p className="mt-2 text-sm leading-6 text-muted">{entry.body}</p>
+                          {entry.details ? (
+                            <ChangeDetails lines={entry.details} id={entry.id} />
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </StaggerIn>
+              </li>
+            );
+          })}
+        </ol>
       ) : (
         /* ================= GRID ================= */
         <div className="grid gap-4 sm:grid-cols-2">

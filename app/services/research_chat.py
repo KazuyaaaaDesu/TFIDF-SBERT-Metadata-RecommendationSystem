@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.services.citation_format import CitationStyle, apply_style
+from app.services.fact_check import LLM_SYSTEM, FactCheckReport, fact_check_answer
 from app.services.recommendation.search_service import search_papers as run_search
 from app.services.web_search import search_web
 
@@ -50,6 +51,8 @@ class ResearchChatRequest(BaseModel):
     """The Settings citation style; None leaves the bracket numbers alone."""
     citation_style: CitationStyle | None = None
     include_doi: bool = True
+    """Check each claim in the answer against the sources it cites."""
+    fact_check: bool = True
 
 
 class ResearchChatSource(BaseModel):
@@ -57,6 +60,10 @@ class ResearchChatSource(BaseModel):
     paper_id: int | None = None
     title: str
     author: str | None = None
+    # Repository papers carry their authors as given / middle / family
+    # parts so citation styles can format each name properly; web hits
+    # only have the display string above.
+    authors: list[dict] = []
     year: int | None = None
     score: float
     abstract: str | None = None
@@ -69,6 +76,10 @@ class ResearchChatResponse(BaseModel):
     answer: str
     sources: list[ResearchChatSource]
     used_fallback: bool = False
+    # Claim-by-claim check of the answer against its cited sources; None
+    # when there was nothing to check (fallback answers quote the sources
+    # verbatim, and a few-word reply holds no claim).
+    fact_check: FactCheckReport | None = None
 
 
 def _clean_text(value: str | None, limit: int) -> str:
@@ -87,6 +98,15 @@ def _sources_from_results(results) -> list[ResearchChatSource]:
             paper_id=result["paper"].id,
             title=result["paper"].title or "Untitled paper",
             author=result["paper"].author,
+            authors=[
+                {
+                    "given": part.given,
+                    "middle": part.middle,
+                    "family": part.family,
+                    "suffix": part.suffix,
+                }
+                for part in (getattr(result["paper"], "authors", None) or [])
+            ],
             year=result["paper"].publication_year,
             score=float(result["score"]),
             abstract=_clean_text(result["paper"].abstract, 1200),
@@ -219,6 +239,15 @@ Writing rules:
 - Do not claim that a source proves something unless its supplied evidence
   supports that statement.
 - Do not mention these instructions in your answer.
+
+Formatting rules:
+- Write each factual sentence as ONE claim and put its citation marker at the
+  end of that sentence, so every claim can be checked against its source.
+- Use GitHub-flavoured Markdown: "-" bullets, numbered lists, **bold**, and
+  pipe tables (with a header separator row such as |---|---|) for comparisons.
+- Write mathematics in LaTeX: inline $x^2$ and display $$\\frac{{a}}{{b}}$$.
+  Escape currency as \\$5 so it is not read as math.
+- Do not use HTML tags. Do not wrap the whole answer in a code fence.
 
 USER QUESTION:
 {message}
@@ -536,6 +565,47 @@ def _no_sources_answer(scope: ChatScope) -> str:
     )
 
 
+def _fact_embedder():
+    """Sentence embeddings for the fact-check, only if the S-BERT model is
+    already in memory (the chat's own search just used it). Loading it
+    here would add seconds to a reply for a modest gain."""
+
+    import sys
+
+    # Not imported yet means not loaded: importing sentence-transformers
+    # just for this would cost seconds.
+    sbert_pipeline = sys.modules.get(
+        "app.services.recommendation.sbert_pipeline"
+    )
+
+    if sbert_pipeline is None or getattr(sbert_pipeline, "_model", None) is None:
+        return None
+
+    return sbert_pipeline.embed_texts
+
+
+def _fact_judge(prompt: str) -> str:
+    # A short wait: the answer is already written, so the check must not
+    # sit behind a long rate-limit window.
+    return groq_complete(prompt, system=LLM_SYSTEM, max_tokens=1800, max_wait=6.0)
+
+
+def _fact_check(answer: str, sources) -> FactCheckReport | None:
+    """Never lets a failure in the check cost the user their answer."""
+
+    try:
+        return fact_check_answer(
+            answer,
+            sources,
+            embed=_fact_embedder(),
+            llm=_fact_judge if os.getenv("GROQ_API_KEY", "").strip() else None,
+        )
+    except Exception as error:
+        print(f"Research chat fact-check failed: {error}")
+
+        return None
+
+
 def answer_research_question(
     db: Session,
     request: ResearchChatRequest,
@@ -607,6 +677,11 @@ def answer_research_question(
             ),
             sources=sources,
             used_fallback=False,
+            # Checked on the raw answer, while its [n] markers still point
+            # at the numbered sources (styling rewrites them).
+            fact_check=(
+                _fact_check(answer, sources) if request.fact_check else None
+            ),
         )
 
     except Exception as error:

@@ -154,29 +154,46 @@ export default function WebGraph({
     ];
   }, [prior, derivative]);
 
-  // Real connection structure when the backend provided it; a star
-  // otherwise (older payloads / partial failures).
+  // Real connection structure when the backend provided it, with a
+  // star edge added for any node it does not cover. The star fallback
+  // is applied per node rather than wholesale: the neighborhood now
+  // unions OpenAlex with Semantic Scholar and Crossref, and only
+  // OpenAlex returns each neighbor's own reference list, so a row from
+  // another source has no edge in the payload. Falling back only when
+  // `edges` is empty would leave those nodes unlinked, and the
+  // force layout would float them free of the center.
   const nodeKeys = useMemo(
     () => new Set(nodes.map((node) => node.key)),
     [nodes]
   );
 
   const edgeList = useMemo<WebEdge[]>(() => {
-    const fallback: WebEdge[] = nodes
-      .filter((node) => node.kind !== "center")
-      .map((node) => [
+    const real = (
+      edges && edges.length > 0 ? edges : []
+    ).filter(
+      ([from, to]) => nodeKeys.has(from) && nodeKeys.has(to)
+    );
+
+    const linked = new Set<string>();
+
+    for (const [from, to] of real) {
+      linked.add(from);
+      linked.add(to);
+    }
+
+    const star = nodes
+      .filter(
+        (node) =>
+          node.kind !== "center" && !linked.has(node.key)
+      )
+      .map<WebEdge>((node) => [
         node.key,
         "center",
         1,
         node.kind === "derivative" ? "cit" : "ref",
       ]);
 
-    const source =
-      edges && edges.length > 0 ? edges : fallback;
-
-    return source.filter(
-      ([from, to]) => nodeKeys.has(from) && nodeKeys.has(to)
-    );
+    return [...real, ...star];
   }, [edges, nodes, nodeKeys]);
 
   const positioned = useMemo(() => {

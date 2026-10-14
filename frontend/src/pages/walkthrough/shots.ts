@@ -4,17 +4,22 @@
  * Every image the Walkthrough and Engine pages show is listed here once,
  * with its title and caption, in reading order. `shotUrl(id)` is the file
  * under /public/walkthrough. All of them were captured from the running
- * app in Researcher (Pro) mode with the default theme, the garden fully
- * grown and every unlock switched on, at 1440 px wide unless noted.
+ * app in Researcher (Pro) mode with the Indigo theme (light mode), the
+ * garden fully grown and every unlock switched on, at 1440 px wide unless
+ * noted.
  */
 
 export interface Shot {
   id: string;
   title: string;
   caption: string;
+  /** File extension under /public/walkthrough; "png" unless set (animated shots use "gif"). */
+  ext?: string;
 }
 
 const S = (id: string, title: string, caption: string): Shot => ({ id, title, caption });
+/** An animated shot: a looping GIF captured from the running app. */
+const G = (id: string, title: string, caption: string): Shot => ({ id, title, caption, ext: "gif" });
 
 export const SHOTS: Shot[] = [
   /* ---------------------------------------------------------- start */
@@ -49,7 +54,7 @@ export const SHOTS: Shot[] = [
   S("repository-list", "Paper table", "Title with subject and category chips, authors, year, date added and type. Star a row to favorite it; tick rows to select."),
   S("repository-algorithm-collapsed", "Algorithm bar", "At rest the algorithm console is a single line: the active pipeline's weight bar and name."),
   S("repository-algorithm-open", "Algorithm bar, open", "Change opens the six presets, the custom mix and (in Recommend scope) Top K and Diversify."),
-  S("repository-algorithm-dials", "Custom dials", "The custom pipeline's three dials normalize to 100% and print the resulting formula."),
+  S("repository-algorithm-dials", "Custom dials", "The custom blend popover: drag the dot on the triangle toward a signal, or use the three dials. The shares normalize to 100% and the resulting formula is printed."),
   S("repository-search-library", "Library search", "Typing in the Library scope filters the table live and highlights the matched words in the snippet."),
   S("repository-recommend", "Recommend scope", "A query ranked by the active pipeline: a score bar per row, Top K and Diversify beside the algorithm buttons."),
   S("repository-recommend-ghost-wire", "Another algorithm, same query", "Pressing GHOST WIRE (S-BERT) re-ranks the same query at once; the header names the algorithm that produced the list."),
@@ -70,7 +75,7 @@ export const SHOTS: Shot[] = [
   /* --------------------------------------------------------- upload */
   S("upload", "Upload", "A drop zone for PDF, BibTeX, RIS and EndNote files, an identifier box (DOI or arXiv) and the BibTeX export guide."),
   S("upload-identifier-typed", "Lookup by identifier", "Paste a DOI, an arXiv id or a link; Look up fetches the metadata."),
-  S("upload-identifier-review", "Review form", "The record resolved from arXiv 1706.03762, ready to correct, with the four required recommendation fields checked on the right."),
+  S("upload-identifier-review", "Review form", "The record resolved from arXiv 1706.03762, ready to correct. A banner warns when the paper is already in the repository."),
   S("upload-pdf-review", "Review form from a PDF", "Dropping a PDF extracts title, authors, abstract and keywords heuristically; you correct them before saving."),
   S("upload-bibtex-popup", "Paste BibTeX manually", "Paste one or many BibTeX entries; each is parsed into the review navigator."),
 
@@ -88,11 +93,11 @@ export const SHOTS: Shot[] = [
 
   /* ---------------------------------------------------------- arena */
   S("arena", "Arena", "The arcade cabinet: query, depth and the high-score board, with the battle log below."),
-  S("arena-cabinet", "The cabinet", "Player one types a query, picks a depth (Top 5, 10 or 15) and presses start; the board keeps the win tally."),
+  S("arena-cabinet", "The cabinet", "Player one types a query, picks a depth (Top 5, 10 or 15) and presses start; the board keeps the tally of decisive wins."),
   S("arena-query-typed", "A query typed", "The Repository / Web scope switch sits above the query line."),
-  S("arena-battling", "Battle in progress", "Six rounds tick by while the pipelines run: ROUND n OF 6."),
+  S("arena-battling", "Battle in progress", "The meter fills as each pipeline actually finishes (n of 6 done), with the finished pipelines and their top results listed."),
   S("arena-result", "Battle complete", "When the battle ends the board updates and the result tabs appear below."),
-  S("arena-winner", "01 Winner", "The pipeline that captured the largest share of independence-weighted consensus, and that share."),
+  S("arena-winner", "01 Winner", "The pipeline that captured the largest share of independence-weighted consensus, and that share. A lead of under two points is shown as too close to call."),
   S("arena-consensus", "02 Consensus", "Papers ordered by how many of the six pipelines ranked them, then by average rank."),
   S("arena-pairwise", "03 Pairwise", "For each pair of pipelines: overlap at K and the mean rank gap."),
   S("arena-battle-grid", "04 Battle grid", "Every paper's rank under every pipeline; empty cells mark papers that missed the top K."),
@@ -100,7 +105,6 @@ export const SHOTS: Shot[] = [
   S("arena-interpretation", "06 Interpretation", "A citation-ready paragraph describing the run in APA 7 and MLA 9."),
   S("arena-history", "Battle log", "Every recorded run, newest first, with the winner and its share, a winner-score spread and pagination."),
   S("arena-web-mode", "Web scope", "Switch the field to the live web: the same six pipelines rank OpenAlex, Crossref and arXiv hits. Web battles are never recorded."),
-  S("arena-stats-for-nerds", "Arena: Stats for Nerds", "The Arena's second tab shows the math behind the numbers."),
 
   /* ------------------------------------------------------------ lab */
   S("lab", "Lab: recipe bench", "Three dials, saved recipes and presets, and a leaderboard."),
@@ -108,9 +112,9 @@ export const SHOTS: Shot[] = [
   S("lab-stats-for-nerds", "Lab: Stats for Nerds", "The computation trace of the recipe on your query."),
 
   /* --------------------------------------------------------- garden */
-  S("lab-garden", "The Garden", "The Tree of Knowledge: a wooden menu above a pixel meadow and the tree."),
+  S("lab-garden", "The Garden", "The Tree of Knowledge: a carved menu above a pixel meadow and the tree."),
   S("garden-card", "The tree card", "Menu, canvas and the action bar of the garden card at 1,000 ft."),
-  S("garden-menu", "The wooden menu", "Tree (species), Feed (growth and fertilizer), Almanac (charms, scene, earn) and Shop."),
+  S("garden-menu", "The carved menu", "Seed bank (species cards), Feed (growth and fertilizer), Almanac (charms, scene, earn) and Shop."),
   S("garden-stage-seed", "Stage 1: Seed", "A winged seed on the meadow."),
   S("garden-stage-seedling", "Stage 2: Seedling", "The first shoot and its first leaves; the status line reads Sprout."),
   S("garden-stage-sapling", "Stage 3: Sapling", "A slender trunk and a small round crown."),
@@ -122,6 +126,8 @@ export const SHOTS: Shot[] = [
   S("garden-species-birch", "Silver Birch", "Pale peeling bark and small, pointed leaves."),
   S("garden-species-elm", "American Elm", "Lopsided leaves and a netted, ridged bark."),
   S("garden-species-redwood", "Giant Redwood", "Needle sprays and a tall, fibrous, red-brown trunk."),
+  S("garden-species-beanstalk", "Jack's Beanstalk", "A slim, swaying stalk of broad heart-shaped leaves that climbs into a bank of cloud."),
+  S("garden-species-rosevine", "Rose Supervine", "A thorny rose shrub grown into a vine: cream thorns on dark canes and crimson and pink blooms."),
   S("garden-almanac-charms", "Almanac: Charms", "Five charms per tree, unlocked by height, each with its own cheat word."),
   S("garden-almanac-armed", "Almanac: all charms on", "Flip a peg to arm a charm; its tag lights up amber."),
   S("garden-almanac-scene", "Almanac: Scene", "Free switches for the garden's ordinary scenery, grouped, with a particles section that is off by default."),
@@ -133,6 +139,12 @@ export const SHOTS: Shot[] = [
   S("garden-dev", "Developer tab", "Test wallet, the Pro override and the hidden looks list."),
   S("garden-tree-info", "Tree info", "The species dossier and the facts the tree has taught you so far."),
   S("garden-ask", "Asking the tree", "Each question returns a fact you have already unlocked; ask too often and the tree grumbles."),
+  G("garden-growth", "Growth, animated", "A looping capture of the stage chips: the seed sprouts and the tree climbs through every stage to the ancient crown while the camera follows it up the trunk."),
+  G("garden-growth-birch", "Silver Birch growing", "The birch's white peeling bark and toothed leaves, from seed to the top of the climb."),
+  G("garden-growth-elm", "American Elm growing", "The elm's netted trunk and golden crown as it climbs through the stages."),
+  G("garden-growth-redwood", "Giant Redwood growing", "A narrow conifer on a red fibrous trunk that opens into sprays of needles at the top."),
+  G("garden-growth-beanstalk", "Jack's Beanstalk growing", "A slim twisting stalk that climbs into the clouds and ends at the giant's castle."),
+  G("garden-growth-rosevine", "Rose Supervine growing", "A rose shrub thickening into a thorny vine, ending at the briar rose castle."),
 
   /* ------------------------------------------------------------ pet */
   S("pet-idle", "The pixel pet", "The resident companion sits at the bottom right and speaks in two voices."),
@@ -163,10 +175,27 @@ export const SHOTS: Shot[] = [
   S("changelog", "Changelog", "Release notes, newest first, as a timeline."),
   S("changelog-grid", "Changelog: grid", "The same notes as cards."),
   S("faq", "FAQ", "Short answers to the common questions."),
+
+  /* --------------------------------------------------------- mobile (390 x 844, 2x) */
+  S("mobile-boot", "Phone: boot screen", "The arcade boot screen at phone width; the title wraps onto four lines."),
+  S("mobile-login", "Phone: sign in", "The sign-in card fills the width."),
+  S("mobile-home", "Phone: home", "Icon-only top bar, the search box and the announcements stack in one column."),
+  S("mobile-nav", "Phone: icon-only top bar", "Labels are hidden and shown as tooltips; the bar scrolls sideways (top: start, bottom: scrolled to the end for Settings and Changelog)."),
+  S("mobile-repository", "Phone: repository", "The paper table folds into two-line rows with a Sort control."),
+  S("mobile-repository-inspector", "Phone: inspector", "Selecting a row opens the inspector below the list, with Details, Notes, PDF and Similar tabs."),
+  S("mobile-recommend", "Phone: recommend", "Ranked results keep the title and the score bar; authors, year and type are dropped."),
+  S("mobile-library", "Phone: My Library", "The Pro library with its tabs, ask box, filters and saved papers."),
+  S("mobile-upload", "Phone: upload", "The drop zone and the identifier box stacked."),
+  S("mobile-upload-link-drop", "Phone: link drop", "Dragging a citation link over the drop zone shows DROP HERE and offers to import the link."),
+  S("mobile-lab", "Phone: lab", "The recipe bench's dials and formula."),
+  S("mobile-garden", "Phone: garden", "The carved menu stacks above the tree stage; the Tree info card starts folded."),
+  S("mobile-garden-fullscreen", "Phone: the tree, full screen", "The full-screen button gives the stage the whole screen, with Menu and Exit at the top."),
+  S("mobile-arena", "Phone: arena", "The cabinet at phone width: field, query, depth and Press start."),
+  S("mobile-settings", "Phone: settings", "Preferences with the site mode picker."),
 ];
 
 const BY_ID = new Map(SHOTS.map((shot) => [shot.id, shot]));
 
 export const shotById = (id: string): Shot | undefined => BY_ID.get(id);
 
-export const shotUrl = (id: string): string => `/walkthrough/${id}.png`;
+export const shotUrl = (id: string): string => `/walkthrough/${id}.${BY_ID.get(id)?.ext ?? "png"}`;

@@ -1,0 +1,247 @@
+/* WALKTHROUGH — "Field guide".
+   A reading column of about 70 characters, a sticky chapter list on the left
+   and a narrow margin on the right where notes hang. Figures are numbered.
+   Colours come only from the theme tokens. */
+
+.wt-shell {
+  max-width: 1180px;
+  --wt-rule: rgb(var(--gray-300));
+  --wt-ink: rgb(var(--ink));
+}
+
+/* ---- masthead: a running head, not a box ---- */
+.wt-shell .wt-banner {
+  border-width: 0 0 1px 0;
+  border-color: rgb(var(--gray-900));
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0 0.75rem;
+  margin-bottom: 2.25rem;
+}
+.wt-stamp {
+  order: 3;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: rgb(var(--muted));
+}
+.wt-shell .wt-banner nav[aria-label="Manuals"] a {
+  border-width: 1px;
+  border-radius: 999px;
+  padding: 0.15rem 0.8rem;
+}
+.wt-shell #wiki-search {
+  border-width: 0 0 1px 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* ---- layout: chapters | column | margin ---- */
+.wt-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.5rem;
+  justify-content: center;
+}
+@media (min-width: 1024px) {
+  .wt-grid {
+    grid-template-columns: 13rem minmax(0, 42rem);
+    gap: 2.5rem;
+  }
+  .wt-grid > .wt-railtoggle { display: none; }
+}
+@media (min-width: 1280px) {
+  .wt-grid { grid-template-columns: 13rem minmax(0, 40rem) 15rem; gap: 2rem 1.5rem; }
+  .wt-grid > .wt-article { grid-column: 2; }
+}
+
+/* ---- chapter list ---- */
+.wt-railtoggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  border: 1px solid rgb(var(--gray-900));
+  border-left-width: 4px;
+  border-left-color: rgb(var(--accent));
+  background: rgb(var(--surface));
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  font-size: 0.8rem;
+  color: rgb(var(--ink));
+}
+.wt-railtoggle > span:first-child {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgb(var(--muted));
+}
+.wt-railtoggle > span:nth-child(2) { flex: 1; font-weight: 700; }
+
+.wt-rail { counter-reset: wtch; }
+.wt-rail nav { border-width: 0 !important; background: transparent !important; border-radius: 0 !important; }
+.wt-rail nav > p {
+  background: transparent !important;
+  color: rgb(var(--ink)) !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgb(var(--gray-900)) !important;
+  padding: 0 0 0.4rem !important;
+  font-size: 10px !important;
+}
+.wt-rail nav > div { padding: 0.9rem 0 0 !important; }
+.wt-rail nav[aria-label="On this page"] { margin-top: 1.5rem; }
+.wt-rail nav[aria-label="On this page"] > p { color: rgb(var(--muted)) !important; border-bottom-style: dashed !important; border-color: rgb(var(--gray-400)) !important; }
+.wt-rail nav[aria-label="On this page"] ol { padding: 0.6rem 0 0 !important; }
+.wt-rail li > a { border-radius: 0; font-weight: 600; padding: 0.3rem 0.5rem 0.3rem 0.6rem; border-left: 2px solid transparent; line-height: 1.35; }
+.wt-rail li > a[aria-current="page"] {
+  background: transparent;
+  color: rgb(var(--ink));
+  border-left-color: rgb(var(--accent));
+  box-shadow: inset 0 -1px 0 rgb(var(--accent));
+  font-weight: 800;
+}
+.wt-rail nav:first-child li > a::before {
+  counter-increment: wtch;
+  content: counter(wtch, decimal-leading-zero) "  ";
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: rgb(var(--muted));
+  white-space: pre;
+}
+
+/* ---- the column ---- */
+.wt-article { counter-reset: wtfig wtsec; }
+.wt-eyebrow {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgb(var(--accent));
+  margin: 0.75rem 0 0.6rem;
+}
+.wt-article > h1 { font-size: clamp(2rem, 5vw, 2.9rem); line-height: 1.04; }
+.wt-article > h1 + p { font-size: 1.1rem; line-height: 1.6; margin-top: 0.9rem; max-width: 60ch; }
+.wt-flow { display: block; }
+.wt-flow > * + * { margin-top: 3.25rem; }
+.wt-article section[id] > h2 {
+  counter-increment: wtsec;
+  font-size: 1.65rem;
+  line-height: 1.2;
+  border-bottom: 1px solid rgb(var(--gray-900));
+  padding-bottom: 0.5rem;
+}
+.wt-article section[id] > h2::before {
+  content: "§ " counter(wtsec, decimal-leading-zero);
+  display: block;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  color: rgb(var(--accent));
+  margin-bottom: 0.35rem;
+}
+.wt-article section[id] > h3 { font-size: 1.15rem; border-bottom-style: dotted; }
+.wt-article section > div { margin-top: 1.25rem; }
+.wt-article section > div > * + * { margin-top: 1.1rem; }
+.wt-article section p:not(figure p):not(aside p):not(table p) {
+  font-size: 1rem;
+  line-height: 1.8;
+  max-width: 70ch;
+}
+.wt-article ul:not(nav ul), .wt-article ol:not(nav ol) { line-height: 1.75; }
+
+/* softer, thinner furniture than the cabinet's chunky frames */
+.wt-article [class*="border-[3px]"] {
+  border-width: 1px;
+  border-radius: 2px;
+}
+.wt-article table { font-size: 0.875rem; }
+
+/* ---- signature: numbered figures ---- */
+.wt-article figure {
+  counter-increment: wtfig;
+  background: transparent;
+  border: 0;
+  border-top: 2px solid rgb(var(--gray-900));
+  border-radius: 0;
+  overflow: visible;
+  padding-top: 0.5rem;
+}
+.wt-article figure > button { border: 1px solid rgb(var(--gray-300)); }
+.wt-article figcaption {
+  background: transparent !important;
+  padding: 0.5rem 0 0 !important;
+}
+.wt-article figcaption::before {
+  content: "FIG. " counter(wtfig);
+  display: block;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: rgb(var(--accent));
+  margin-bottom: 0.15rem;
+}
+.wt-article figcaption p { font-size: 12px !important; line-height: 1.5 !important; }
+/* a gallery's frame is one figure group: its own figures keep the numbering */
+.wt-article div > figure { border-top-width: 1px; }
+
+/* ---- signature: margin notes ---- */
+.wt-article aside {
+  border: 0 !important;
+  border-left: 3px solid rgb(var(--accent)) !important;
+  border-radius: 0 !important;
+  background: rgb(var(--surface));
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+@media (min-width: 1280px) {
+  .wt-article section aside {
+    float: right;
+    clear: right;
+    width: 15rem;
+    margin-right: -16.5rem;
+    margin-top: 0.25rem;
+    background: transparent;
+    border-left-width: 1px !important;
+    border-left-color: rgb(var(--gray-400)) !important;
+    padding: 0 0 0 0.9rem;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: rgb(var(--muted));
+  }
+  .wt-article section aside > span:first-child {
+    display: block;
+    width: fit-content;
+    margin-bottom: 0.25rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: rgb(var(--accent));
+  }
+}
+
+/* ---- pager / footer ---- */
+.wt-flow > nav[aria-label="Previous and next page"] a { border-radius: 0; border-width: 0 0 2px 0; background: transparent; padding-inline: 0; }
+.wt-flow > footer { border-width: 1px 0 0 0; border-radius: 0; background: transparent; }
+
+@media (max-width: 1023px) {
+  .wt-article > h1 { font-size: 2rem; }
+}
+
+@media (min-width: 1024px) { .wt-grid > .wt-railtoggle { display: none; } }
+
+/* wide screens: screenshots hang in the margin too, beside the text they illustrate */
+@media (min-width: 1280px) {
+  /* not the infobox's own thumbnail: that one stays inside its floated box */
+  .wt-article :not([class*="float-right"]) > figure[style*="--thumb-w"] {
+    float: right !important;
+    clear: right !important;
+    width: 15rem !important;
+    max-width: 15rem !important;
+    margin: 0.25rem -16.5rem 1rem 0 !important;
+  }
+}

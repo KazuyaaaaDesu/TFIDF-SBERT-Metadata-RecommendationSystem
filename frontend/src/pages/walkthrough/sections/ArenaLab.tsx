@@ -57,10 +57,9 @@ export function ArenaPage() {
             The <Chip>Web</Chip> field runs the same six pipelines over live OpenAlex, Crossref and arXiv
             hits, vectorized on the fly with the stored TF-IDF vectorizer and the S-BERT model. It has
             source, peer-review and open-access toggles, and its results are exploratory: a web battle is
-            never recorded in the tally. The Arena's second tab, <Chip>Stats for Nerds</Chip>, shows the
-            computation behind the numbers (and goes away with the NERD switch).
+            never recorded in the tally. The maths behind the numbers is in the Stats for Nerds
+            drawer that every page shares (it goes away with the NERD switch); the Arena has no tab of its own for it.
           </P>
-          <WikiGallery cols={1} ids={["arena-stats-for-nerds"]} />
         </WikiSub>
       </WikiSection>
   );

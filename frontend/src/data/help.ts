@@ -113,7 +113,8 @@ const SPECIAL_ENTRIES: HelpEntry[] = [
     ],
     body:
       "The Tree of Knowledge is the Garden in the Lab. Plant the " +
-      "starter Oak; Maple, Birch, Elm, and Redwood are skins from " +
+      "starter Oak; Maple, Birch, Elm, Redwood, the Beanstalk, and the " +
+      "Rose Supervine are skins from " +
       "the tree-card menus. The tree grows by feeding: every " +
       "fertilizer packet nudges it along a 10,000-step march with " +
       "seven evenly divided stages — Seed, Seedling, Sapling, Young " +
@@ -133,24 +134,31 @@ const SPECIAL_ENTRIES: HelpEntry[] = [
       "discount",
       "height",
       "cheat",
+      "charm",
       "daisies",
-      "dance",
-      "pinata",
+      "pro",
+      "purchase",
+      "buy",
     ],
     body:
       "The Sun Shop lives in the tree card's menus in the Garden. It " +
       "sells fertilizer in packs of 1, 5, or 10 — larger packs cost " +
       "less — and you can buy a pack or drag it straight onto the " +
-      "tree. Each packet adds 2 growth points and 30 feet; ten " +
-      "thousand packets take the tree from Seed to Ancient maple. At " +
-      "100, 500, and 1000 feet it unlocks a typed cheat word: " +
-      "daisies, dance, or pinata, and a stored garden tip otherwise. " +
+      "tree. Each packet adds 2 growth points, and height follows " +
+      "the tree's stage: 3,000 packets take it from Seed to the " +
+      "ancient crown at 1,000 feet. At 250, 450, 650, 850 and 1,000 " +
+      "feet it unlocks one of that tree's five charm words (the " +
+      "oak's are mast, daisies, jay, dapple and hollow), and a " +
+      "stored garden tip otherwise. " +
       "You earn sun by using the system: +10 for a daily visit, +1 " +
       "for 10 pets and for each question (daily caps), +5 for a " +
       "treasure or achievement, +2 for five tips. The Tree skins " +
       "menu sells species skins for growth tokens (+3 a day, +1 per " +
       "battle, +1 per five tree asks, +1 per treasure and " +
-      "achievement).",
+      "achievement). A Pro Pack card ($4.99, a SIMULATED demo " +
+      "checkout: nothing is charged) unlocks My Library PRO and adds " +
+      "1,000 fertilizer, 1,000 tree tokens and one seed pack. The " +
+      "secret quests, Pet and Garden, are still yours to finish.",
   },
   {
     title: "RANKED SEARCH",
@@ -189,6 +197,39 @@ const SPECIAL_ENTRIES: HelpEntry[] = [
       "score against its difference from the papers already listed. " +
       "Near-identical papers do not stack. The option can reduce " +
       "precision a small amount. Leave it off for pure score order.",
+  },
+  {
+    title: "BLEND IN WEB RESULTS",
+    keywords: [
+      "blend web",
+      "blend in web results",
+      "web and local",
+      "mix web results",
+      "recommend web",
+    ],
+    body:
+      "The Recommend scope has a Blend in web results option (off by default). " +
+      "When on, a run also fetches live web hits for the same query and ranks " +
+      "them with the corpus in one list. Web rows carry a WEB tag and an " +
+      "Import button. If the web sources are down, you still get the " +
+      "repository results.",
+  },
+  {
+    title: "SIMILAR PAPERS FOR A WEB RESULT",
+    keywords: [
+      "web similar",
+      "similar web result",
+      "related works web",
+      "web prior works",
+      "web inspector similar",
+    ],
+    body:
+      "Select a web result and open its Similar tab. In your library ranks " +
+      "your repository against the result's title and abstract with the " +
+      "active algorithm; click a row to open that paper. On the web lists " +
+      "the result's prior and derivative works from OpenAlex, found by DOI " +
+      "or, failing that, by title. If OpenAlex cannot match it, you see " +
+      "No related works found for this result.",
   },
   {
     title: "DUPLICATES",
@@ -249,6 +290,24 @@ const SPECIAL_ENTRIES: HelpEntry[] = [
       "file: precision, recall, MRR, MAP, and NDCG at a chosen K. The " +
       "tool can derive judgments from OpenAlex citation links. This " +
       "makes pipeline tuning measurable outside the Arena.",
+  },
+  {
+    title: "WEB SEARCH SOURCES",
+    keywords: [
+      "doaj",
+      "source",
+      "sources",
+      "openalex",
+      "crossref",
+      "arxiv",
+      "open access",
+      "web search",
+    ],
+    body:
+      "Web search can draw on OpenAlex, Crossref, arXiv, and DOAJ. " +
+      "DOAJ (the Directory of Open Access Journals) is opt-in: tick it " +
+      "to add free-to-read articles from vetted open-access journals. " +
+      "Every DOAJ hit is open access; it has no citation counts.",
   },
 ];
 

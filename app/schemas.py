@@ -10,10 +10,25 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class AuthorPart(BaseModel):
+    """One author as the parts a citation style needs."""
+
+    given: str = ""
+    middle: str = ""
+    family: str = ""
+    suffix: str = ""
+
+    class Config:
+        from_attributes = True
+
+
 class PaperOut(BaseModel):
     id: int
     title: str
     author: str | None = None
+    # The same people as ``author``, split into given / middle / family
+    # (+ suffix) in author order -- what citation styles are built from.
+    authors: list[AuthorPart] = []
     abstract: str | None = None
     keywords: str | None = None
     publication_year: int | None = None
@@ -41,6 +56,8 @@ class PaperUpdate(BaseModel):
 
     title: str | None = None
     author: str | None = None
+    # Structured edit; takes precedence over ``author`` when both are sent.
+    authors: list[AuthorPart] | None = None
     abstract: str | None = None
     keywords: str | None = None
     publication_year: int | None = None

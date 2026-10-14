@@ -10,7 +10,14 @@
  * which are guarded), so it runs under `node --test`.
  */
 
-export type VariantSpeciesId = "crimson" | "oak" | "birch" | "elm" | "redwood";
+export type VariantSpeciesId =
+  | "crimson"
+  | "oak"
+  | "birch"
+  | "elm"
+  | "redwood"
+  | "beanstalk"
+  | "rosevine";
 
 export interface TreeVariant {
   id: string;
@@ -58,6 +65,18 @@ export const TREE_VARIANTS: Record<VariantSpeciesId, TreeVariant[]> = {
     { id: "autumn-rust", label: "Autumn Rust", foliage: { hue: -135, sat: 0.85, light: -0.01 }, wash: { rgb: [140, 70, 40], amount: 0.12 } },
     { id: "blue-spruce", label: "Blue Spruce", foliage: { hue: 46, sat: 0.85, light: 0.0 }, wash: { rgb: [60, 80, 100], amount: 0.14 } },
     { id: "golden-dawn", label: "Golden Dawn", foliage: { hue: -100, sat: 0.95, light: 0.07 }, wash: { rgb: [140, 110, 50], amount: 0.12 } },
+  ],
+  beanstalk: [
+    ORIGINAL_VARIANT,
+    { id: "golden-harvest", label: "Golden Harvest", foliage: { hue: -58, sat: 0.95, light: 0.02 }, wash: { rgb: [150, 120, 50], amount: 0.14 } },
+    { id: "moonvine", label: "Moonvine", foliage: { hue: 96, sat: 0.7, light: 0.06 }, wash: { rgb: [90, 120, 150], amount: 0.16 } },
+    { id: "magic-bean", label: "Magic Bean", foliage: { hue: 168, sat: 0.8, light: 0.02 }, wash: { rgb: [130, 90, 160], amount: 0.16 } },
+  ],
+  rosevine: [
+    ORIGINAL_VARIANT,
+    { id: "blue-rose", label: "Blue Rose", foliage: { hue: -118, sat: 0.9, light: 0.0 }, wash: { rgb: [70, 90, 150], amount: 0.16 } },
+    { id: "white-rose", label: "White Rose", foliage: { hue: 20, sat: 0.28, light: 0.16 }, wash: { rgb: [200, 195, 205], amount: 0.2 } },
+    { id: "golden-rose", label: "Golden Rose", foliage: { hue: 76, sat: 0.95, light: 0.03 }, wash: { rgb: [150, 110, 50], amount: 0.14 } },
   ],
 };
 
@@ -163,6 +182,8 @@ const SWATCH_BASE: Record<VariantSpeciesId, { leaf: string[]; bark: string }> = 
   birch: { leaf: ["#d9a21b", "#f2c53a", "#ffe16b"], bark: "#c8c4bc" },
   elm: { leaf: ["#e0a028", "#f5c042", "#ffe070"], bark: "#4d453d" },
   redwood: { leaf: ["#276e3c", "#44985a", "#80c88a"], bark: "#6e3620" },
+  beanstalk: { leaf: ["#2f8a2a", "#5cc23a", "#b6f06a"], bark: "#4a7a26" },
+  rosevine: { leaf: ["#b3173f", "#e8366f", "#ff8fb4"], bark: "#4a2236" },
 };
 
 const hexRgb = (hex: string): number[] => [

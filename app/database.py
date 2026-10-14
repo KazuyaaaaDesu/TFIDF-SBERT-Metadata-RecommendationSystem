@@ -18,7 +18,12 @@ from app.models.models import Base
 # regardless of where a script that imports this module is run from.
 _DB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(_DB_DIR, exist_ok=True)
-DATABASE_URL = f"sqlite:///{os.path.join(_DB_DIR, 'academic_repository.db')}"
+# RESEARCH_DB_PATH points the app at another database file (a throwaway copy
+# for testing destructive actions, say). Unset, it is app/data/.
+_DB_PATH = os.environ.get("RESEARCH_DB_PATH") or os.path.join(
+    _DB_DIR, "academic_repository.db"
+)
+DATABASE_URL = f"sqlite:///{_DB_PATH}"
 
 # check_same_thread=False is needed because frameworks like FastAPI/Flask
 # may handle a single SQLite connection across different threads.
@@ -95,10 +100,95 @@ def _ensure_columns() -> None:
             conn.commit()
 
 
+def backfill_authors() -> int:
+    """Structure the author string of every paper that has none yet.
+
+    ``paper_authors`` is new, so papers stored before it have a
+    ``papers.author`` string and no parts. Re-assigning the same text
+    would not register as a change, so the parts are built directly.
+    Idempotent: only papers without any author row are touched.
+    Returns the number of papers structured.
+    """
+    from app.models.models import Paper, PaperAuthor, _author_rows
+    from app.services.author_names import parse_author_list
+
+    with SessionLocal() as session:
+        # Keep the stored display strings exactly as they are.
+        session.info["skip_author_sync"] = True
+        have = {
+            row[0]
+            for row in session.query(PaperAuthor.paper_id).distinct()
+        }
+        done = 0
+
+        for paper in session.query(Paper).filter(
+            Paper.author.isnot(None), Paper.author != ""
+        ):
+            if paper.id in have:
+                continue
+
+            names = parse_author_list(paper.author)
+
+            if not names:
+                continue
+
+            paper.authors = _author_rows(names)
+            done += 1
+
+        session.commit()
+
+    return done
+
+
+# Columns added to tables that may already exist in a user's database
+# (create_all never alters an existing table). SQLite supports ADD COLUMN;
+# each default is what an already-stored row should read as.
+_ADDED_COLUMNS = {
+    "battle_runs": [
+        ("margin", "FLOAT"),
+        ("decisive", "BOOLEAN"),
+        ("judged_basis", "VARCHAR(16)"),
+        ("judged_leader", "VARCHAR(50)"),
+        ("judgement_json", "TEXT"),
+    ],
+    "tournament_runs": [
+        ("status", "VARCHAR(16) NOT NULL DEFAULT 'done'"),
+        ("progress_done", "INTEGER NOT NULL DEFAULT 0"),
+        ("progress_total", "INTEGER NOT NULL DEFAULT 0"),
+        ("settings_json", "TEXT"),
+        ("error", "TEXT"),
+        ("busy_seconds", "FLOAT NOT NULL DEFAULT 0"),
+        ("finished_at", "DATETIME"),
+    ],
+}
+
+
+def _ensure_added_columns() -> None:
+    with engine.connect() as conn:
+        for table, columns in _ADDED_COLUMNS.items():
+            existing = {
+                row[1]
+                for row in conn.execute(text(f"PRAGMA table_info({table})"))
+            }
+
+            if not existing:
+                continue  # table not created yet; create_all makes it whole
+
+            for name, ddl in columns:
+                if name not in existing:
+                    conn.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+                    )
+
+        conn.commit()
+
+
 def init_db() -> None:
     """Create all tables if they don't already exist."""
     Base.metadata.create_all(bind=engine)
     _ensure_columns()
+    _ensure_added_columns()
+    backfill_authors()
 
 
 def get_session():

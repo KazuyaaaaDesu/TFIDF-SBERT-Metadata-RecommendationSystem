@@ -1,0 +1,97 @@
+/* ============================================================
+   REPOSITORY — the card catalogue
+   A dense reading-room workstation: filter drawer on the left, the
+   card list in the middle, the card in hand on the right. Rows carry an
+   accession number and a spine colour per subject; panel headers are
+   ruled like index cards. Scoped under .cat-repo, built from theme
+   tokens only (skins and dark mode carry through).
+   ============================================================ */
+
+.cat-repo {
+  --cat-rule: rgb(var(--gray-900) / 0.14);
+  --cat-red: rgb(var(--accent) / 0.6);
+}
+
+/* panels: flatter, thinner frame, a soft drawer shadow */
+.cat-repo .cat-panel {
+  border-width: 2px;
+  border-radius: 3px;
+  box-shadow: 3px 3px 0 var(--cat-rule);
+}
+
+/* header strips: ruled like the top of an index card */
+.cat-repo .cat-head {
+  border-bottom-width: 2px;
+  box-shadow: inset 0 -4px 0 rgb(var(--canvas)), inset 0 -5px 0 var(--cat-rule);
+}
+/* the card in hand carries the catalogue card's red rule */
+.cat-repo .cat-card .cat-head {
+  box-shadow: inset 0 -4px 0 rgb(var(--canvas)), inset 0 -6px 0 var(--cat-red);
+}
+
+/* the drawer label plate on the list header */
+.cat-repo .cat-plate {
+  padding: 1px 8px;
+  border: 2px solid rgb(var(--gray-900));
+  border-radius: 2px;
+  background: rgb(var(--surface));
+  box-shadow: inset 0 0 0 2px rgb(var(--canvas));
+}
+
+/* column headings: catalogue small caps */
+.cat-repo thead tr {
+  letter-spacing: 0.12em;
+}
+
+/* rows: ruled, with a spine down the left edge */
+.cat-repo tr.cat-row {
+  border-bottom-color: var(--cat-rule);
+}
+.cat-repo tr.cat-row > td:first-child {
+  box-shadow: inset 5px 0 0 var(--spine, transparent);
+}
+.cat-repo tr.cat-row:hover > td:first-child {
+  box-shadow: inset 8px 0 0 var(--spine, transparent);
+}
+
+/* accession number above the title */
+.cat-repo .cat-acc {
+  display: block;
+  margin-bottom: 2px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: rgb(var(--muted));
+}
+
+/* The inspector's pop-out button: an icon, filled with ink so it reads as
+   an action, not a fourth tab (the tabs are accent when active, pale
+   otherwise). */
+.inspector-popout-btn {
+  display: inline-flex;
+  height: 2.25rem;
+  width: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid rgb(var(--gray-900));
+  border-radius: 0.25rem;
+  background: rgb(var(--gray-900));
+  color: rgb(var(--on-ink));
+  box-shadow: 2px 2px 0 rgb(var(--accent));
+  transition: transform 0.12s steps(2), box-shadow 0.12s steps(2), filter 0.12s;
+  cursor: pointer;
+}
+.inspector-popout-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 rgb(var(--accent));
+}
+.inspector-popout-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 0 0 0 rgb(var(--accent));
+}
+.inspector-popout-btn:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}

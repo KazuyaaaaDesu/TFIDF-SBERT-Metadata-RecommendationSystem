@@ -61,6 +61,16 @@ const LABELS: Record<string, string> = {
   slug: "Banana Slug",
   mist: "Coastal Mist",
   grove: "Family Grove",
+  pods: "Bean Pods",
+  beans: "Magic Beans",
+  hen: "Golden Hen",
+  gleam: "Golden Gleam",
+  harp: "Golden Harp",
+  petals: "Rose Petals",
+  brambles: "Thorn Brambles",
+  butterfly: "Blue Butterfly",
+  blush: "Rose Blush",
+  rapier: "Rose Rapier",
 };
 
 /** The five charms of a tree, lowest first. */

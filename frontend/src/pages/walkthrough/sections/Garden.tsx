@@ -1,4 +1,4 @@
-import { Chip, WikiSection, WikiSub, WikiTable } from "../wiki";
+import { Chip, WikiCite, WikiSection, WikiSub, WikiTable } from "../wiki";
 import { P, WikiGallery, WikiNote, WikiSteps, WikiThumb } from "../wikiMedia";
 
 const CHARMS: [string, string, string, string][] = [
@@ -7,6 +7,8 @@ const CHARMS: [string, string, string, string][] = [
   ["Silver Birch", "catkins · anemone · woodpecker", "moonbeam · ribbons", "Catkins, Wood Anemones, Woodpecker, Moonbeam, Bark Ribbons"],
   ["American Elm", "coins · wisteria · oriole", "shade · lantern", "Seed Coins, Wisteria Swags, Oriole's Nest, Avenue Shade, Avenue Lamp"],
   ["Giant Redwood", "drip · ferns · slug", "mist · grove", "Fog Drip, Sword Ferns, Banana Slug, Coastal Mist, Family Grove"],
+  ["Giant Beanstalk", "pods · beans · hen", "gleam · harp", "Bean Pods, Magic Beans, Golden Hen, Golden Gleam, Golden Harp"],
+  ["Rose Supervine", "petals · brambles · butterfly", "blush · rapier", "Rose Petals, Thorn Brambles, Blue Butterfly, Rose Blush, Rose Rapier"],
 ];
 
 export function GardenPage() {
@@ -17,29 +19,30 @@ export function GardenPage() {
           The Lab's <Chip>Garden</Chip> tab grows a pixel-art tree from a winged seed to an ancient giant. It is
           the system's playful layer, and it is also functional: the tree teaches one fact about the
           system per question, and growing it past its Young stage unlocks the Pro tabs of My Library.
+          A demo Pro Pack in the Sun Shop ($4.99, nothing is charged) unlocks them too, with a bundle of fertilizer, tree tokens and a seed pack; the secret quests, Pet and Garden, are still yours to finish.
           Everything in the garden is drawn procedurally on a small canvas and scaled by whole
           pixels, so the art stays crisp at any window size.
         </P>
         <P>
-          The garden card is built from a wooden menu at the top, the meadow with the tree and, under
+          The garden card is built from a carved menu at the top (wood, slate stone, parchment, midnight, meadow or blossom: pick the frame from the Frame menu at its top right; the Dev switch sits beside it), the meadow with the tree and, under
           it, an action bar (<Chip>Ask the tree</Chip>, <Chip>Buy fertilizer</Chip>, <Chip>Reset progress</Chip>).
           A <Chip>Tree info</Chip> panel at the lower left carries the species' dossier, and a button at
           the lower right paints the tree in an alternative color scheme.
         </P>
 
-        <WikiSub id="garden-menu" title="The wooden menu">
+        <WikiSub id="garden-menu" title="The carved menu">
           <WikiThumb id="garden-menu" float="center" width={820} />
           <WikiTable
             headers={["Group", "Contents"]}
             rows={[
-              [<Chip key="t">Tree</Chip>, "Five species chips. The planted one is lit; the others show a padlock and a price in growth tokens until you buy their skin."],
+              [<Chip key="t">Seed bank</Chip>, "Seven species as trading cards: rarity pips and price on top, the tree in an art window, a name banner and a footer. The planted card is lit and raised; locked cards are dashed with a padlock and a price in growth tokens until you buy their skin."],
               [<Chip key="f">Feed</Chip>, "The growth counter (packets fed so far), your fertilizer in hand and a multiplier (1×, 2×, 10×) for how many packets one click feeds."],
               [<Chip key="a">Almanac</Chip>, "Charms (n of 5 unlocked), Scene (free scenery switches) and Earn (how to get more sun)."],
               [<Chip key="s">Shop</Chip>, "Sun shop, Skins, Themes and a Developer tab."],
             ]}
           />
           <P>
-            The line at the right of the menu names the tree's current stage, its true height and how
+            The line beside the title names the tree's current stage, its true height and how
             many of its facts it has taught you so far ("Elder tree · 1000 ft · 0/55 learned").
           </P>
         </WikiSub>
@@ -61,6 +64,11 @@ export function GardenPage() {
               "garden-stage-mature", "garden-stage-ancient", "garden-stage-summit",
             ]}
           />
+          <WikiGallery
+            title="The same climb, animated: press a stage chip and the tree morphs up the stages"
+            cols={1}
+            ids={["garden-growth"]}
+          />
           <P>
             The garden opens at your real progress. The stage chip at the top of the meadow is a
             dropdown: you can preview any stage you have already conquered, and the tree morphs between
@@ -71,16 +79,26 @@ export function GardenPage() {
           </P>
         </WikiSub>
 
-        <WikiSub id="garden-species" title="Five species, each from its own reference">
+        <WikiSub id="garden-species" title="Seven species, each from its own reference">
           <P>
             Each species has its own leaf shape, bark texture, growth curve, stage lines and charms, drawn
             from its real botany: the maple's palmate five-lobed leaf, the oak's rounded lobes, the
             birch's toothed, pointed oval on white peeling bark, the elm's lopsided leaf and netted
-            ridges, the redwood's flat needle sprays on a red fibrous trunk. Branches fork like a
-            binary tree, slightly outward, so every crown is different. Higher up the trunk the view
+            ridges, the redwood's flat needle sprays on a red fibrous trunk. Two more come from stories:
+            Jack's beanstalk, a slim stalk of broad heart-shaped leaves that sways a little and climbs
+            into banks of cloud (at the very top of its climb stands the giant's cloud castle, paler than the sleeper's, with a huge door and a golden harp in its window, with fireflies and drifting sparks of magic instead of sylphs), and the rose
+            supervine, a rose shrub thickened into a thorny vine, with scalloped crimson and pink
+            blooms among sprigs of leaves and, at the top of its climb, the briar rose castle where the
+            sleeper lies (grey brick, a rose window, a door ajar on her bed, and canes that keep creeping up the towers).
+            Branches fork like a binary tree, slightly outward, so every crown is different. Higher up the trunk the view
             shows hanging vines, sylphs and sun shafts, and at the summit clouds, twigs and many leaves.
           </P>
-          <WikiGallery cols={4} ids={["garden-species-oak", "garden-species-birch", "garden-species-elm", "garden-species-redwood"]} />
+          <WikiGallery cols={3} ids={["garden-species-oak", "garden-species-birch", "garden-species-elm", "garden-species-redwood", "garden-species-beanstalk", "garden-species-rosevine"]} />
+          <WikiGallery
+            title="Five more species growing, seed to summit"
+            cols={2}
+            ids={["garden-growth-birch", "garden-growth-elm", "garden-growth-redwood", "garden-growth-beanstalk", "garden-growth-rosevine"]}
+          />
           <P>
             Each tree can also be painted in three alternative color schemes (plus its original), chosen
             with the button at the bottom right of the meadow: for the maple Golden Hour, Spring Green and
@@ -115,7 +133,9 @@ export function GardenPage() {
             plant, creature, light and weather, relic) and a cheat word. Open <Chip>Almanac → Charms</Chip>
             and flip a peg, or type the word into the cheat console; a pop-up confirms every switch and
             closes itself after ten seconds. A charm that is still locked shows how many feet remain.
+            A feeding always announces the word at the height it just crossed.
           </P>
+          <WikiCite ids={["garden-charm-word-pairing"]} />
           <WikiTable
             headers={["Species", "250 / 450 / 650 ft", "850 / 1,000 ft", "Names"]}
             rows={CHARMS}
@@ -123,8 +143,12 @@ export function GardenPage() {
           <WikiThumb id="garden-charms-on" float="center" width={640} />
           <P>
             The creatures are interactive: click or tap the squirrel, the jay, the woodpecker, the
-            oriole or the slug and they react (a chatter, a hop and a flight, a drum roll, a song, a curl).
-            The scarlet creeper grows up the trunk as the tree grows.
+            oriole, the slug, the golden hen or the blue butterfly and they react (a chatter, a hop and a
+            flight, a drum roll, a song, a curl, a golden egg, a new bloom to land on). The trunk
+            creatures live on the bare part of the trunk that is on screen: the squirrel runs on the
+            ground, climbs up when the tree grows and comes down when it shrinks (or when you step back
+            to an earlier stage), always facing the tree. The scarlet creeper grows up the trunk as the
+            tree grows.
           </P>
         </WikiSub>
 

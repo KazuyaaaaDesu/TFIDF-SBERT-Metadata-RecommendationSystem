@@ -120,6 +120,45 @@ function Canopy({
     );
   }
 
+  if (species === "beanstalk") {
+    return (
+      <>
+        {/* a tall green vine: broad leaves stacked up a slim stalk */}
+        <LeafBlock x={14} y={17} w={12} h={4} foliage={foliage} />
+        <LeafBlock x={16} y={12} w={8} h={5} foliage={foliage} />
+        {level >= 3 && (
+          <>
+            <LeafBlock x={11} y={14} w={7} h={3} foliage={foliage} />
+            <LeafBlock x={22} y={9} w={7} h={3} foliage={foliage} />
+            <LeafBlock x={17} y={3} w={6} h={6} foliage={foliage} />
+            <rect x={13} y={21} width={2} height={3} fill={foliage.deep} />
+            <rect x={26} y={20} width={2} height={3} fill={foliage.deep} />
+          </>
+        )}
+      </>
+    );
+  }
+
+  if (species === "rosevine") {
+    return (
+      <>
+        {/* a tangled, arching crown dotted with blooms */}
+        <LeafBlock x={12} y={15} w={16} h={7} foliage={foliage} />
+        <LeafBlock x={15} y={10} w={10} h={6} foliage={foliage} />
+        <rect x={17} y={13} width={2} height={2} fill="#ffd1df" />
+        {level >= 3 && (
+          <>
+            <LeafBlock x={9} y={13} w={22} h={8} foliage={foliage} />
+            <LeafBlock x={16} y={5} w={8} h={6} foliage={foliage} />
+            <rect x={13} y={14} width={2} height={2} fill="#ffd1df" />
+            <rect x={23} y={12} width={2} height={2} fill="#ffd1df" />
+            <rect x={19} y={7} width={2} height={2} fill="#ffd1df" />
+          </>
+        )}
+      </>
+    );
+  }
+
   if (species === "redwood") {
     return (
       <>
@@ -199,7 +238,7 @@ export default function KnowledgeTree({
   );
 
   const baseTrunkTop =
-    tree.id === "redwood" ? 16 : tree.id === "elm" ? 18 : 20;
+    tree.id === "redwood" || tree.id === "beanstalk" ? 16 : tree.id === "elm" ? 18 : 20;
   const trunkTop = baseTrunkTop - trunkBonus;
 
   return (

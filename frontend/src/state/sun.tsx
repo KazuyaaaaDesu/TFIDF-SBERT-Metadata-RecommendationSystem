@@ -7,21 +7,22 @@
    and tip milestones. Daily pet/question earnings are capped so
    the currency always comes from play, never from grinding.
 
-   Fertilizer bought in the Lab's Sun Shop adds growth points
-   (+2, for the stage/trivia tiers) and feet of height (+30). At
-   100, 500, and 1000 feet the tree unlocks a typed CHEAT WORD;
-   any other feeding dispenses the next stored garden tip, in
-   order and without repeats. Cheats toggle real pet effects.
+   Fertilizer bought in the Sun Shop goes into a hold and is applied
+   to the planted tree's own bed. Each packet adds 2 growth points;
+   the height in feet follows the species' stage table (see
+   treeHeightByFertilizer), not a flat amount per packet. At 250,
+   450, 650, 850 and 1000 feet the tree unlocks a charm word; any
+   other feeding speaks a stage line or a progress line.
 
-   Feeding wisdom is deterministic: the sample this is modeled on
-   picks a random tip, but every sentence here is stored and
-   rotated so nothing is invented and nothing repeats blindly.
+   What the tree says on a feeding is deterministic: every sentence
+   is stored and rotated, so nothing is invented.
    ============================================================ */
 
 import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -59,7 +60,10 @@ function readProOverride(): boolean {
   }
 }
 
+import { cheatsCrossed } from "../utils/gardenMilestones";
 import { isPresentationStored } from "../utils/presentation";
+import { applyProPack } from "../utils/proPack";
+import { addOwnedSkin, readOwnedSkins } from "./skins";
 import {
   CHEAT_HEIGHTS,
   CHEAT_SETS,
@@ -67,6 +71,7 @@ import {
   PROGRESS_LINES,
   SPECIES_STAGE_FERT,
   SPECIES_STAGE_LINES,
+  TREE_SPECIES,
   treeHeightByFertilizer,
   treeStageIndex,
   type TreeSpeciesId,
@@ -153,19 +158,22 @@ interface SunState {
       is announced once, ever, no matter how many times the tree
       re-crosses the milestone. */
   announcedCheats: string[];
+  /** The simulated Pro Pack was "bought" (granted once, ever). */
+  proPurchased: boolean;
+}
+
+/** Every species starts with an empty bed. */
+function emptyProgress(): Record<TreeSpeciesId, number> {
+  return Object.fromEntries(
+    TREE_SPECIES.map((entry) => [entry.id, 0]),
+  ) as Record<TreeSpeciesId, number>;
 }
 
 const EMPTY_STATE: SunState = {
   balance: 0,
   spent: 0,
   species: DEFAULT_SPECIES,
-  gardenProgress: {
-    crimson: 0,
-    oak: 0,
-    birch: 0,
-    elm: 0,
-    redwood: 0,
-  },
+  gardenProgress: emptyProgress(),
   fertilizer: 0,
   tokens: 0,
   fertilizerHold: 0,
@@ -182,6 +190,7 @@ const EMPTY_STATE: SunState = {
   cheats: [],
   activeCheats: [],
   announcedCheats: [],
+  proPurchased: false,
 };
 
 function today(): string {
@@ -201,19 +210,16 @@ function readState(): SunState {
 
     const species = (
       parsed.species &&
-      ["crimson", "oak", "birch", "elm", "redwood"].includes(parsed.species)
+      TREE_SPECIES.some((entry) => entry.id === parsed.species)
     )
       ? (parsed.species as TreeSpeciesId)
       : DEFAULT_SPECIES;
 
     const fertilizer = Number(parsed.fertilizer) || 0;
-    const gardenProgress = {
-      crimson: Number((parsed as { gardenProgress?: Record<string, unknown> }).gardenProgress?.["crimson"]) || 0,
-      oak: Number((parsed as { gardenProgress?: Record<string, unknown> }).gardenProgress?.["oak"]) || 0,
-      birch: Number((parsed as { gardenProgress?: Record<string, unknown> }).gardenProgress?.["birch"]) || 0,
-      elm: Number((parsed as { gardenProgress?: Record<string, unknown> }).gardenProgress?.["elm"]) || 0,
-      redwood: Number((parsed as { gardenProgress?: Record<string, unknown> }).gardenProgress?.["redwood"]) || 0,
-    } as Record<TreeSpeciesId, number>;
+    const savedBeds = (parsed as { gardenProgress?: Record<string, unknown> }).gardenProgress;
+    const gardenProgress = Object.fromEntries(
+      TREE_SPECIES.map((entry) => [entry.id, Number(savedBeds?.[entry.id]) || 0]),
+    ) as Record<TreeSpeciesId, number>;
 
     /* Legacy saves: lift the old single count into the planted tree. */
     if (
@@ -245,6 +251,7 @@ function readState(): SunState {
       cheats: strings(parsed.cheats),
       activeCheats: strings(parsed.activeCheats),
       announcedCheats: strings(parsed.announcedCheats),
+      proPurchased: parsed.proPurchased === true,
     };
   } catch {
     return EMPTY_STATE;
@@ -410,6 +417,14 @@ interface SunContextValue {
   /** TEMPORARY dev override that forces proUnlocked on. */
   proOverride: boolean;
   setProOverride: (value: boolean) => void;
+  /** The simulated Pro Pack was bought (no real payment exists). */
+  proPurchased: boolean;
+  /** Grant the Pro Pack bundle once. Idempotent: a second call
+   *  grants nothing. The secret quests are untouched. */
+  purchasePro: () => {
+    granted: boolean;
+    seedSpecies: TreeSpeciesId | null;
+  };
   /** Next height milestone, or undefined when everything blooms. */
   nextMilestone: CheatMilestone | undefined;
   cheats: string[];
@@ -439,12 +454,14 @@ interface SunContextValue {
   resetTree: () => void;
   /** Plant a species; each tree keeps its own growth. */
   plantSpecies: (id: TreeSpeciesId) => void;
-  /** TEMPORARY: dev top-up for shop/tree testing. */
   /** The planted tree's own cheat words. */
   cheatSet: { word: string; effect: string }[];
+  /** TEMPORARY: dev top-up for shop/tree testing. */
   testTopUp: (sunAmount: number, tokenAmount: number) => void;
   /** DEV: set the planted tree's fertilizer count (its growth) directly. */
   testSetFertilizer: (count: number) => void;
+  /** DEV: set sun and growth tokens back to zero (balances only). */
+  testZeroWallet: () => void;
   /** DEV: arm every unlocked charm of the planted tree, or none. */
   testArmCharms: (all: boolean) => void;
   /** The planted species. */
@@ -486,18 +503,64 @@ export function SunProvider({ children }: { children: ReactNode }) {
   /* PRO unlock: any species' bed past its Young stage threshold —
      the temporary dev override forces it on for this run. */
   const proUnlocked =
-    !isPresentationStored() &&
-    (proOverride ||
-    Object.entries(state.gardenProgress).some(
-      ([species, fert]) =>
-        treeStageIndex(fert, species as TreeSpeciesId) >= 3,
-    ));
+    state.proPurchased ||
+    (!isPresentationStored() &&
+      (proOverride ||
+        Object.entries(state.gardenProgress).some(
+          ([species, fert]) =>
+            treeStageIndex(fert, species as TreeSpeciesId) >= 3,
+        )));
 
   const nextMilestone = CHEAT_HEIGHTS.map((heightFt, index) => ({
     height: heightFt,
     word: set[index]?.word ?? "",
     effect: set[index]?.effect ?? "",
   })).find((milestone) => height < milestone.height);
+
+  /* SIMULATED purchase: the bundle (fertilizer hold, tree tokens, one
+     seed pack = a new tree skin) is credited exactly once. The ref
+     closes the window before React re-renders. */
+  const proBuying = useRef(false);
+
+  function purchasePro(): {
+    granted: boolean;
+    seedSpecies: TreeSpeciesId | null;
+  } {
+    if (state.proPurchased || proBuying.current) {
+      return { granted: false, seedSpecies: null };
+    }
+    proBuying.current = true;
+
+    const grant = applyProPack(
+      {
+        tokens: state.tokens,
+        fertilizerHold: state.fertilizerHold,
+        proPurchased: false,
+      },
+      readOwnedSkins(),
+      TREE_SPECIES.map((entry) => entry.id),
+    );
+    const seedSpecies = grant.seedSpecies as TreeSpeciesId | null;
+
+    if (seedSpecies) addOwnedSkin(seedSpecies);
+
+    setState((current) => {
+      if (current.proPurchased) return current;
+      const rolled = rollDay(current);
+      const next = applyProPack(
+        {
+          tokens: rolled.tokens,
+          fertilizerHold: rolled.fertilizerHold,
+          proPurchased: false,
+        },
+        [],
+        [],
+      ).wallet;
+      return { ...rolled, ...next };
+    });
+
+    return { granted: true, seedSpecies };
+  }
 
   function grantTokens(
     amount: number,
@@ -550,6 +613,14 @@ export function SunProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  /* TEMPORARY: empty the wallet (sun and growth tokens) so the
+     earn-and-spend loop can be tried from a clean balance. The trees,
+     the fertilizer hold and the grants already paid out all stay —
+     this is the balance only, not the progress. */
+  function testZeroWallet() {
+    setState((current) => ({ ...rollDay(current), balance: 0, tokens: 0 }));
+  }
+
   /* DEV: put the planted tree at a chosen growth, for testing. The
      cheats that growth reaches unlock as they would by feeding. */
   function testSetFertilizer(count: number) {
@@ -584,13 +655,7 @@ export function SunProvider({ children }: { children: ReactNode }) {
       ...current,
       fertilizer: 0,
       spent: 0,
-      gardenProgress: {
-        crimson: 0,
-        oak: 0,
-        birch: 0,
-        elm: 0,
-        redwood: 0,
-      },
+      gardenProgress: emptyProgress(),
     }));
   }
 
@@ -705,13 +770,7 @@ export function SunProvider({ children }: { children: ReactNode }) {
       state.species,
     );
     const set = currentCheatSet();
-    const crossed = CHEAT_HEIGHTS.filter(
-      (heightFt) => heightFt > before && heightFt <= after,
-    ).map((heightFt, index) => ({
-      height: heightFt,
-      word: set[index]?.word ?? "",
-      effect: set[index]?.effect ?? "",
-    }));
+    const crossed = cheatsCrossed(before, after, CHEAT_HEIGHTS, set);
 
     /* A cheat is announced the first time its milestone is really
        achieved — never on re-crossings, never twice. */
@@ -727,7 +786,7 @@ export function SunProvider({ children }: { children: ReactNode }) {
       wisdom = fresh
         .map(
           (milestone) =>
-            `Cheat unlocked: type "${milestone.word}" — ${milestone.effect}`,
+            `Charm unlocked: type "${milestone.word}" — ${milestone.effect}`,
         )
         .join(" ");
     } else {
@@ -744,7 +803,13 @@ export function SunProvider({ children }: { children: ReactNode }) {
         const nextFert = ferts.find((f) => f > state.fertilizer + count);
         if (nextFert !== undefined) {
           const gap = treeHeightByFertilizer(nextFert, state.species) - after;
-          wisdom = `${PROGRESS_LINES[state.gardenTips % PROGRESS_LINES.length]} ${gap} ft to the next stage.`;
+          const line = PROGRESS_LINES[state.gardenTips % PROGRESS_LINES.length];
+          /* Late stages can share a painted height; say so rather than
+             promising "0 ft" to the next stage. */
+          wisdom =
+            gap > 0
+              ? `${line} ${gap} ft to the next stage.`
+              : `${line} Same height as the next stage, only fuller.`;
         } else {
           wisdom = PROGRESS_LINES[state.gardenTips % PROGRESS_LINES.length];
         }
@@ -876,6 +941,8 @@ export function SunProvider({ children }: { children: ReactNode }) {
         proUnlocked,
         proOverride,
         setProOverride,
+        proPurchased: state.proPurchased,
+        purchasePro,
         nextMilestone,
         cheatSet: currentCheatSet(),
         cheats: state.cheats,
@@ -890,6 +957,7 @@ export function SunProvider({ children }: { children: ReactNode }) {
         spendTokens,
         testTopUp,
         testSetFertilizer,
+        testZeroWallet,
         testArmCharms,
         species: state.species,
         resetTree,

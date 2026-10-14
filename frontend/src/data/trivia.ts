@@ -468,8 +468,8 @@ export const TRIVIA: Trivia[] = [
     tier: 2,
     topic: "Walkthrough",
     text:
-      "Cheat words bloom at 250, 650, and 1,000 ft — each species " +
-      "owns its own three, and typing the word arms it until " +
+      "Charms unlock at 250, 450, 650, 850 and 1,000 ft — each " +
+      "species owns its own five, and typing the word arms it until " +
       "typed again.",
   },
   {

@@ -200,6 +200,10 @@ export function Recommending() {
             near-duplicate results are spread apart.
           </P>
           <P>
+            Tick <Chip>Blend in web results</Chip> to also fetch live web hits for the same query and
+            rank them with the corpus in one list; web rows carry a WEB tag and an Import button.
+          </P>
+          <P>
             A <Chip>seed paper</Chip> works the same way, but the query is an existing paper: use
             "Find similar" on My Library, or the seed action in the Repository, and the system builds
             the query representation from that paper's own prepared text and excludes it from the
@@ -246,6 +250,11 @@ export function Recommending() {
           <P>
             As in Recommend, pressing another algorithm re-ranks the web results: the candidates stay,
             their order and scores change. Web recommendations are exploratory and never stored.
+          </P>
+          <P>
+            Selecting a web result opens an inspector with its own <Chip>Similar</Chip> tab: <Chip>In
+            your library</Chip> ranks your repository against the result's title and abstract with the
+            active algorithm, and <Chip>On the web</Chip> lists its OpenAlex prior and derivative works.
           </P>
           <WikiHatnote>
             Main article: <Xref to="/walkthrough-engine/web-ranking">Ranking the web</Xref> on the Engine page.

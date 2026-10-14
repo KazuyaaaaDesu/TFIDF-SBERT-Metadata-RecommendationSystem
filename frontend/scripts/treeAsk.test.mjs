@@ -86,7 +86,7 @@ test("a brushed-off ask still counts, so pestering keeps the tree grumpy", () =>
 test("grumpy lines are short, in the tree's voice, and species flavored", () => {
   const seen = new Set();
 
-  for (const species of ["crimson", "oak", "birch", "elm", "redwood", "ghost"]) {
+  for (const species of ["crimson", "oak", "birch", "elm", "redwood", "beanstalk", "rosevine", "ghost"]) {
     for (let i = 0; i < 60; i++) {
       const line = grumpyLine(species, Math.random);
 

@@ -45,7 +45,7 @@ export const SITE_FEATURES: SiteFeatureMeta[] = [
     key: "repository",
     label: "Repository",
     path: "/repository",
-    blurb: "Browse, filter, and open catalogd papers.",
+    blurb: "Browse, filter, and open cataloged papers.",
     pro: false,
   },
   {
@@ -136,6 +136,9 @@ export const PRESENTATION_FEATURES: Record<string, SiteFeatureState> = {
   repository: "shown",
   library: "shown",
   faq: "shown",
+  // A plain Account and preferences page (no mode switch, no developer
+  // controls): see the presentation branch of pages/Settings.tsx.
+  settings: "shown",
   // The study's own scope: import, the six pipelines compared in the Arena,
   // and the math behind the ranking.
   upload: "shown",

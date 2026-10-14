@@ -5,7 +5,7 @@
 Re:Search keeps a local repository of papers, ranks related literature with three signals (lexical, semantic and metadata), and lets you compare six ways of combining them side by side. It runs entirely on your own machine: a FastAPI + SQLite backend and a React + TypeScript frontend.
 
 <p align="center">
-  <img src="frontend/public/walkthrough/repository.png" alt="The Repository: filters, paper table and inspector" width="820">
+  <img src="frontend/public/walkthrough/repository.png?v=indigo" alt="The Repository: filters, paper table and inspector" width="820">
 </p>
 
 > **Status:** a local research prototype. It is built to be explored and measured, not deployed.
@@ -18,9 +18,9 @@ Re:Search keeps a local repository of papers, ranks related literature with thre
 | --- | --- |
 | **Find** | Search your own papers, rank them against a query or a seed paper, or rank the open scholarly web (OpenAlex, Crossref, arXiv) with the same algorithms. |
 | **Add** | Drop PDFs, BibTeX, RIS or EndNote files, paste DOIs and arXiv ids, or send a Google Scholar citation. Everything is checked before it is saved. |
-| **Compare** | The Arena runs all six pipelines on one query and tells you where they agree, where they split and which one wins. |
-| **Keep** | A personal library with a dashboard, a similarity graph and a research chat that cites its sources. |
-| **Explore** | A recipe bench for designing your own weights, and a few playful extras we'd rather you discover than read about. |
+| **Compare** | The Arena runs all six pipelines on one query and tells you where they agree, where they split and which one wins, or that the call is too close to make. A tournament then tests them on many papers with known references. |
+| **Keep** | A personal library you can organise into your own nested folders, with a dashboard, a similarity graph and a research chat that cites its sources. |
+| **Explore** | A Lab for designing your own weights, dueling them against the presets and sweeping the whole blend triangle, plus a few playful extras we'd rather you discover than read about. |
 
 ---
 
@@ -28,14 +28,14 @@ Re:Search keeps a local repository of papers, ranks related literature with thre
 
 <table>
   <tr>
-    <td width="33%"><img src="frontend/public/walkthrough/repository-web.png" alt="Web results ranked by an algorithm"><br><b>Recommend</b><br>Pick an algorithm and the results re-rank at once, on your papers or on the web.</td>
-    <td width="33%"><img src="frontend/public/walkthrough/arena-winner.png" alt="The Arena's winner banner"><br><b>Arena</b><br>Six pipelines, one query: consensus, pairwise agreement and a winner.</td>
-    <td width="33%"><img src="frontend/public/walkthrough/library-graph-selected.png" alt="The similar-papers graph with cluster labels"><br><b>My Library</b><br>See how your papers cluster, then ask questions across them.</td>
+    <td width="33%"><img src="frontend/public/walkthrough/repository-web.png?v=indigo" alt="Web results ranked by an algorithm"><br><b>Recommend</b><br>Pick an algorithm and the results re-rank at once, on your papers or on the web.</td>
+    <td width="33%"><img src="frontend/public/walkthrough/arena-winner.png?v=indigo" alt="The Arena's winner banner"><br><b>Arena</b><br>Six pipelines, one query: consensus, pairwise agreement and a winner.</td>
+    <td width="33%"><img src="frontend/public/walkthrough/library-graph-selected.png?v=indigo" alt="The similar-papers graph with cluster labels"><br><b>My Library</b><br>See how your papers cluster, then ask questions across them.</td>
   </tr>
   <tr>
-    <td><img src="frontend/public/walkthrough/upload-identifier-review.png" alt="The Upload review form"><br><b>Upload</b><br>Review what was extracted, fix it, and see a duplicate warning before you save.</td>
-    <td><img src="frontend/public/walkthrough/lab-simulated.png" alt="The Lab's recipe bench"><br><b>Lab</b><br>Mix the three signals into your own recipe and test it against the presets.</td>
-    <td><img src="frontend/public/walkthrough/repository-stats-for-nerds.png" alt="Stats for Nerds"><br><b>Stats for Nerds</b><br>The exact numbers behind any ranking, live as you search.</td>
+    <td><img src="frontend/public/walkthrough/upload-identifier-review.png?v=indigo" alt="The Upload review form"><br><b>Upload</b><br>Review what was extracted, fix it, and see a duplicate warning before you save.</td>
+    <td><img src="frontend/public/walkthrough/lab-simulated.png?v=indigo" alt="The Lab's recipe bench"><br><b>Lab</b><br>Mix the three signals into your own recipe and test it against the presets.</td>
+    <td><img src="frontend/public/walkthrough/repository-stats-for-nerds.png?v=indigo" alt="Stats for Nerds"><br><b>Stats for Nerds</b><br>The exact numbers behind any ranking, live as you search.</td>
   </tr>
 </table>
 
@@ -52,6 +52,18 @@ Each paper is turned into a prepared text (title, abstract and keywords) and sco
 | **Metadata** | Title, abstract, keywords and publication year, weighted equally. |
 
 Six fixed pipelines combine them (each alone, three pairs, and all three together), and a seventh, *custom*, takes your own weights. The scores are normalized, fused, and ties are broken by year and then title, so the same input always gives the same ranking. The mathematics, with a worked example, is in the wiki's **Engine** manual.
+
+---
+
+## Organising and checking
+
+| | |
+| --- | --- |
+| **Folders** | My Library keeps folders like Zotero or Mendeley: nested, a paper can sit in several, and nothing is deleted when a folder is. Drag papers onto a folder (the ghost turns into a folder as you reach it), or right-click a paper and pick one. Right-click menus always open fully inside the window. |
+| **Honest verdicts** | A battle's winner is the pipeline most others agree with, which is not the same as the best one. A lead of under two points is shown as *too close to call*, and only decisive wins are tallied. |
+| **Judging** | A battle on a seed paper is scored against that paper's own references; a text battle can be judged by ticking what is relevant, blind to which pipeline found it. Judged battles pool into a board that states a verdict only once there are enough of them. |
+| **Series** | Run many queries, or sampled library papers, under one label and read them as one board with intervals. |
+| **Sweep** | In the Lab, score a grid of blends on leave-one-out queries and see where quality lives on the TF-IDF / S-BERT / metadata triangle. The best blend is picked on half of the queries and confirmed on the other half, so a lucky winner is not mistaken for a finding. |
 
 ---
 
@@ -74,9 +86,9 @@ There is a search box, a contents rail and full-screen figures. We kept the surp
 | --- | --- |
 | **Library** | Visitors: a calm "smarter librarian" with only the features the library staff enable. |
 | **Researcher** | The full tool, every control switched on. |
-| **Presentation** | The version that ships: no developer controls, the study's own features, formal names throughout. |
+| **Presentation** | The version that ships: no developer controls, the study's own features, formal names throughout, and a plain Settings page (account, preferences, about). |
 
-Switch in **Settings**. (Presentation can be left again with a key combination and a password; the wiki says how.)
+Switch in **Settings**; Presentation has its own Settings page with the same switch. In Library and Presentation, the demo Pro purchase (nothing is charged) opens the **Lab** as a beta, with the tree in its Garden tab, and in Presentation the pixel pet too, all without developer controls. Presentation can also be left with a key combination and a password; the wiki says how.
 
 ---
 
@@ -131,6 +143,8 @@ python -m unittest discover -s test          # backend
 cd frontend && npm run test:units            # frontend logic
 cd frontend && npm run check                 # type-check
 ```
+
+To try destructive actions (deleting papers, say) without touching your data, point a second backend at a copy of the database with `RESEARCH_DB_PATH=/path/to/copy.db`; add `RESEARCH_CORS_ORIGINS=http://localhost:5174` if you also run a second dev server.
 
 ---
 

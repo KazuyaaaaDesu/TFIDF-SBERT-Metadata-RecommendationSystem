@@ -18,7 +18,7 @@ import {
   variantsFor,
 } from "../src/utils/treeVariants.ts";
 
-const SPECIES = ["crimson", "oak", "birch", "elm", "redwood"];
+const SPECIES = ["crimson", "oak", "birch", "elm", "redwood", "beanstalk", "rosevine"];
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 test("every species has its original colors plus three more palettes", () => {
@@ -68,6 +68,8 @@ test("every variant visibly recolors the foliage of its species", () => {
     birch: [[240, 200, 60], [200, 170, 40]],
     elm: [[230, 180, 40], [200, 150, 30]],
     redwood: [[40, 130, 110], [60, 160, 130]],
+    beanstalk: [[60, 170, 60], [180, 240, 100]],
+    rosevine: [[216, 31, 91], [255, 143, 180]],
   };
 
   for (const id of SPECIES) {

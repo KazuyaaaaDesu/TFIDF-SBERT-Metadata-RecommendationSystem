@@ -25,6 +25,8 @@ import {
   type WikiPage,
 } from "./wikiPages";
 import { shotUrl } from "./shots";
+import "./walkthrough.css";
+import "./engine.css";
 import { WikiMediaProvider, WikiNavbox } from "./wikiMedia";
 
 interface Heading {
@@ -121,13 +123,21 @@ function Rail({
   wiki,
   current,
   headings,
+  open,
 }: {
   wiki: WikiId;
   current: WikiPage;
   headings: Heading[];
+  open: boolean;
 }) {
+  const prefix = wiki === "engine" ? "eng" : "wt";
+
   return (
-    <aside aria-label="Wiki navigation" className="lg:sticky lg:top-4 lg:h-fit lg:max-h-[calc(100vh-7rem)] lg:w-60 lg:shrink-0 lg:overflow-y-auto">
+    <aside
+      id="wiki-rail"
+      aria-label="Wiki navigation"
+      className={`${prefix}-rail ${open ? "" : "max-lg:hidden"} lg:sticky lg:top-4 lg:h-fit lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto`}
+    >
       <nav className="overflow-hidden rounded border-[3px] border-gray-900 bg-white">
         <p className="border-b-[3px] border-gray-900 bg-gray-900 px-3 py-2 font-mono text-xs font-bold tracking-[0.2em] text-onInk">
           {WIKIS[wiki].name.toUpperCase()}
@@ -174,7 +184,7 @@ function Rail({
           </p>
           <ol className="max-h-[40vh] space-y-0.5 overflow-y-auto p-3 font-mono text-xs">
             {headings.map((heading) => (
-              <li key={heading.id} className={heading.level === 3 ? "pl-3" : ""}>
+              <li key={heading.id} className={heading.level === 3 ? "pl-3" : `${prefix}-top`}>
                 <a
                   href={`#${heading.id}`}
                   onClick={(event) => {
@@ -244,6 +254,11 @@ export default function WikiShell({ wiki }: { wiki: WikiId }) {
   const current = pages.find((page) => page.slug === slug);
   const accessible = (Object.keys(WIKIS) as WikiId[]).filter((id) => canAccess(WIKIS[id].feature));
   const headings = useHeadings(pathname);
+  const [railOpen, setRailOpen] = useState(false);
+  const prefix = wiki === "engine" ? "eng" : "wt";
+
+  // A new page folds the chapter list away again on phones.
+  useEffect(() => setRailOpen(false), [pathname]);
 
   // New page: back to the top, or to the heading in the address.
   useEffect(() => {
@@ -269,9 +284,9 @@ export default function WikiShell({ wiki }: { wiki: WikiId }) {
 
   return (
     <WikiMediaProvider>
-      <div className="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6">
+      <div className={`${prefix}-shell mx-auto w-full px-4 py-6 sm:px-6`}>
         {/* ------------------------------------------------ banner */}
-        <header className="mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded border-[3px] border-gray-900 bg-white px-4 py-3">
+        <header className={`${prefix}-banner mb-6 flex flex-wrap items-center gap-x-4 gap-y-3 rounded border-[3px] border-gray-900 bg-white px-4 py-3`}>
           <Link to={WIKIS[wiki].base} className="font-pixelify text-lg font-bold leading-none text-ink">
             Re:Search <span className="text-accent">Wiki</span>
           </Link>
@@ -289,16 +304,30 @@ export default function WikiShell({ wiki }: { wiki: WikiId }) {
               </Link>
             ))}
           </nav>
+          <p className={`${prefix}-stamp`} aria-hidden="true">
+            {wiki === "engine" ? "DWG · BLUEPRINT" : "FIELD GUIDE"}
+          </p>
           <div className="ml-auto">
             <SearchBox accessible={accessible} />
           </div>
         </header>
 
-        <div className="flex flex-col gap-6 lg:flex-row">
-          <Rail wiki={wiki} current={current} headings={headings} />
+        <div className={`${prefix}-grid`}>
+          <button
+            type="button"
+            aria-expanded={railOpen}
+            aria-controls="wiki-rail"
+            onClick={() => setRailOpen((value) => !value)}
+            className={`${prefix}-railtoggle lg:hidden`}
+          >
+            <span>{wiki === "engine" ? "Sheet index" : "Chapters"}</span>
+            <span className="truncate">{current.title}</span>
+            <span aria-hidden="true">{railOpen ? "▴" : "▾"}</span>
+          </button>
+          <Rail wiki={wiki} current={current} headings={headings} open={railOpen} />
 
           {/* ------------------------------------------------ article */}
-          <article data-wiki-article className="min-w-0 flex-1">
+          <article data-wiki-article className={`${prefix}-article min-w-0`}>
             <nav aria-label="Breadcrumb" className="mb-2 font-mono text-xs text-muted">
               <Link to={WIKIS[wiki].base} className="hover:text-accent">
                 Wiki
@@ -315,6 +344,13 @@ export default function WikiShell({ wiki }: { wiki: WikiId }) {
               )}
             </nav>
 
+            <p className={`${prefix}-eyebrow`}>
+              {wiki === "engine"
+                ? `Sheet ${String(index + 1).padStart(2, "0")} of ${String(pages.length).padStart(2, "0")}`
+                : `Chapter ${index + 1} of ${pages.length}`}
+              {" · "}
+              {current.group}
+            </p>
             <h1 className="text-3xl font-bold leading-none tracking-tighter text-ink sm:text-4xl">
               {current.slug === "main" ? `The Re:Search ${WIKIS[wiki].name}` : current.title}
             </h1>
@@ -332,7 +368,7 @@ export default function WikiShell({ wiki }: { wiki: WikiId }) {
               ))}
             </div>
 
-            <div className="mt-6 space-y-8">
+            <div className={`${prefix}-flow mt-6`}>
               {current.render()}
 
               {current.slug === "main" && <PortalCards wiki={wiki} />}

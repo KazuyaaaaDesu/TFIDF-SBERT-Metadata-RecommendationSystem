@@ -1,5 +1,11 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 
 import AuthLayout from "./layouts/AuthLayout";
 import AppLayout from "./layouts/AppLayout";
@@ -31,12 +37,13 @@ const LibraryHome = lazy(() => import("./pages/home/LibraryHome"));
 const Admin = lazy(() => import("./pages/admin/Admin"));
 const Settings = lazy(() => import("./pages/Settings"));
 
-export default function App() {
+/*
+ * A data router (not <BrowserRouter>) so pages can use useBlocker, e.g. the
+ * Upload page's unsaved-work prompt. One catch-all route hands every path to
+ * the <Routes> tree below, so routing itself is unchanged.
+ */
+function AppRoutes() {
   return (
-    <>
-      {!isPresentationStored() && <ScanlineOverlay />}
-      {!isPresentationStored() && <BootSplash />}
-      <BrowserRouter>
       <SiteModeProvider>
       <Routes>
         {/* Auth pages -- no top nav */}
@@ -165,7 +172,17 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </SiteModeProvider>
-      </BrowserRouter>
+  );
+}
+
+const router = createBrowserRouter([{ path: "*", element: <AppRoutes /> }]);
+
+export default function App() {
+  return (
+    <>
+      {!isPresentationStored() && <ScanlineOverlay />}
+      {!isPresentationStored() && <BootSplash />}
+      <RouterProvider router={router} />
     </>
   );
 }

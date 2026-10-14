@@ -1,4 +1,10 @@
 import type { Paper } from "../api";
+import {
+  familyNames,
+  formatBibtex,
+  invertedName,
+  paperAuthors,
+} from "./authorNames.ts";
 
 /* ============================================================
    CITATION EXPORT — BibTeX, RIS, EndNote, and Reference
@@ -28,15 +34,13 @@ function cleanMulti(value: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
-/** First author's last name + year, for citation keys. */
+/** First author's family name + year, for citation keys. */
 export function citationKey(paper: Paper): string {
-  const surnames = cleanMulti(paper.author).map(
-    (author) => author.trim().split(/\s+/).pop() ?? "",
-  );
-
-  const surname = surnames[0]
-    ?.toLowerCase()
-    .replace(/[^a-z]/g, "") ?? "paper";
+  const surname =
+    familyNames(paperAuthors(paper))[0]
+      ?.toLowerCase()
+      .normalize("NFD")
+      .replace(/[^a-z]/g, "") || "paper";
 
   const year = paper.publication_year ?? "";
 
@@ -69,7 +73,7 @@ export function paperToBibtex(
 
   const fields: [string, string | null | undefined][] = [
     ["title", paper.title],
-    ["author", paper.author],
+    ["author", formatBibtex(paperAuthors(paper))],
     ["year", paper.publication_year?.toString()],
     ...(options?.includeAbstract === false
       ? []
@@ -107,8 +111,8 @@ function risType(paper: Paper): string {
 export function paperToRis(paper: Paper): string {
   const lines: string[] = [`TY  - ${risType(paper)}`];
 
-  for (const author of cleanMulti(paper.author)) {
-    lines.push(`AU  - ${author}`);
+  for (const author of paperAuthors(paper)) {
+    lines.push(`AU  - ${invertedName(author)}`);
   }
 
   if (clean(paper.title)) lines.push(`TI  - ${clean(paper.title)}`);
@@ -141,8 +145,8 @@ function endnoteType(paper: Paper): string {
 export function paperToEndNote(paper: Paper): string {
   const lines: string[] = [`%0 ${endnoteType(paper)}`];
 
-  for (const author of cleanMulti(paper.author)) {
-    lines.push(`%A ${author}`);
+  for (const author of paperAuthors(paper)) {
+    lines.push(`%A ${invertedName(author)}`);
   }
 
   if (clean(paper.title)) lines.push(`%T ${clean(paper.title)}`);
@@ -174,8 +178,8 @@ function refmanType(paper: Paper): string {
 export function paperToRefMan(paper: Paper): string {
   const lines: string[] = [refmanType(paper)];
 
-  for (const author of cleanMulti(paper.author)) {
-    lines.push(`AU - ${author}`);
+  for (const author of paperAuthors(paper)) {
+    lines.push(`AU - ${invertedName(author)}`);
   }
 
   if (clean(paper.title)) lines.push(`TI - ${clean(paper.title)}`);

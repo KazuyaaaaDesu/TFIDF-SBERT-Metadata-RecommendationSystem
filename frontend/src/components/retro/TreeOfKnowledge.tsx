@@ -13,11 +13,13 @@
    bubble is a stored trivia from data/trivia.ts.
    ============================================================ */
 
+import { GARDEN_FRAME_KEY, applyGardenFrame } from "../../utils/gardenFrame";
 import {
   useCallback,
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 
@@ -28,6 +30,7 @@ import {
   KNOWLEDGE_STAGES,
   STAGE_HEIGHTS,
   SPECIES_GROWTH_MARKERS,
+  SPECIES_STAGE_FERT,
   knowledgePoints,
   knowledgeStageFromHeight,
   nextKnowledgeHeight,
@@ -73,6 +76,7 @@ import ThemeShop from "./ThemeShop";
 import SparkleGlyph from "./SparkleGlyph";
 import SunGlyph from "./SunGlyph";
 import TokenGlyph from "./TokenGlyph";
+import { useSiteMode } from "../../state/siteMode";
 import RetroDialog from "./RetroDialog";
 import { Palette, Sparkles, Sprout } from "lucide-react";
 
@@ -98,6 +102,8 @@ function emptyBank(): Record<TreeSpeciesId, string[]> {
     birch: [],
     elm: [],
     redwood: [],
+    beanstalk: [],
+    rosevine: [],
   };
 }
 
@@ -195,6 +201,216 @@ function writeAskCount(count: number) {
    surface, accentSoft): fixed navy text on the accent-soft fill was
    unreadable in dark mode. */
 
+/* ---------------- frame themes ----------------
+   The garden's carved frame comes in six looks. The choice is remembered
+   and written on <html> while the garden is on screen, so the dialogs
+   (which live outside the card) wear the same frame. */
+
+const FRAME_KEY = GARDEN_FRAME_KEY;
+
+const FRAMES: { id: string; label: string; a: string; b: string }[] = [
+  { id: "wood", label: "Carved wood", a: "#5b3a1e", b: "#f0b848" },
+  { id: "stone", label: "Slate stone", a: "#4b505c", b: "#7fe0cc" },
+  { id: "parchment", label: "Parchment", a: "#e6d5aa", b: "#f1ac3a" },
+  { id: "midnight", label: "Midnight", a: "#1c2246", b: "#ffd36e" },
+  { id: "meadow", label: "Meadow", a: "#2e5a30", b: "#ffe36a" },
+  { id: "blossom", label: "Blossom", a: "#7a2c52", b: "#ffd36e" },
+];
+
+function readFrame(): string {
+  try {
+    const raw = window.localStorage.getItem(FRAME_KEY);
+
+    if (raw && FRAMES.some((frame) => frame.id === raw)) return raw;
+  } catch {
+    // best-effort
+  }
+
+  return "wood";
+}
+
+function FramePicker({
+  frame,
+  onPick,
+}: {
+  frame: string;
+  onPick: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const current = FRAMES.find((entry) => entry.id === frame) ?? FRAMES[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const away = (event: PointerEvent) => {
+      if (boxRef.current && !boxRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const esc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc);
+
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  /* a menu rather than a row of swatches, so any number of frames fits */
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title="Change the menu's frame"
+        onClick={() => setOpen((value) => !value)}
+        className={`${CHIP} wood-chip`}
+      >
+        <Palette className="h-3.5 w-3.5" />
+        <span className="text-[10px] uppercase tracking-wider">Frame</span>
+        <span
+          aria-hidden="true"
+          className="h-3.5 w-3.5 rounded-sm border-2 border-[color:var(--gm-edge2)]"
+          style={{ background: `linear-gradient(135deg, ${current.a} 0 55%, ${current.b} 55% 100%)` }}
+        />
+        <span aria-hidden="true" className="text-[9px]">{open ? "\u25B4" : "\u25BE"}</span>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Menu frame"
+          className="wood-board right-0 top-full z-50 mt-1.5 grid max-h-64 w-52 gap-1 overflow-y-auto rounded p-1.5 shadow-[4px_4px_0_rgba(0,0,0,0.4)]"
+          style={{ position: "absolute" }}
+        >
+          {FRAMES.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              role="option"
+              aria-selected={frame === entry.id}
+              onClick={() => {
+                onPick(entry.id);
+                setOpen(false);
+              }}
+              className={`${CHIP} ${frame === entry.id ? "wood-chip-lit" : "wood-chip"} w-full justify-start`}
+            >
+              <span
+                aria-hidden="true"
+                className="h-4 w-6 shrink-0 rounded-sm border-2 border-[color:var(--gm-edge2)]"
+                style={{ background: `linear-gradient(135deg, ${entry.a} 0 55%, ${entry.b} 55% 100%)` }}
+              />
+              <span className="text-[10px] uppercase tracking-wider">{entry.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** How rare a tree is, from its skin price: one to five pips. */
+function rarityOf(price: number): number {
+  if (price <= 0) return 1;
+  if (price <= 25) return 2;
+  if (price <= 40) return 3;
+  if (price <= 60) return 4;
+
+  return 5;
+}
+
+/**
+ * A tree as a trading card: a rarity strip on top, the tree in an art
+ * window, a name banner in the tree's own colors, and a footer that says
+ * whether it is planted, in the seed bank, or locked behind its price.
+ */
+function SpeciesCard({
+  species,
+  planted,
+  owned,
+  price,
+  onChoose,
+  onBuy,
+}: {
+  species: (typeof TREE_SPECIES)[number];
+  planted: boolean;
+  owned: boolean;
+  price: number;
+  onChoose: () => void;
+  onBuy: () => void;
+}) {
+  const pips = rarityOf(price);
+
+  return (
+    <button
+      type="button"
+      className="gm-card"
+      style={
+        {
+          "--card-a": species.leafLight,
+          "--card-b": species.leafDeep,
+        } as CSSProperties
+      }
+      aria-pressed={owned ? planted : undefined}
+      data-locked={owned ? undefined : ""}
+      onClick={owned ? onChoose : onBuy}
+      title={
+        owned
+          ? planted
+            ? `${species.label} planted — swap with \u2190 \u2192`
+            : `Plant the ${species.label}`
+          : `Locked — buy the ${species.label} skin for ${price} growth tokens`
+      }
+    >
+      <span className="gm-card-top" aria-hidden="true">
+        <span className="gm-card-pips">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <i key={i} data-off={i < pips ? undefined : ""} />
+          ))}
+        </span>
+        <span>{price <= 0 ? "free" : `${price}`}</span>
+      </span>
+      <span className="gm-card-art">
+        {owned ? (
+          <span
+            className="pointer-events-none absolute left-1/2 bottom-0 block select-none"
+            style={{ width: 256 * 0.4, height: 144 * 0.4, marginLeft: -(256 * 0.4) / 2 }}
+            aria-hidden="true"
+          >
+            <PixelGrowthTree
+              speciesId={species.id}
+              growth={SPECIES_STAGE_FERT[species.id][3] / TREE_GROWTH_TARGET}
+              cssScale={0.4}
+              static
+            />
+          </span>
+        ) : (
+          <span className="gm-card-lock" aria-hidden="true">
+            {"\uD83D\uDD12"}
+          </span>
+        )}
+      </span>
+      <span className="gm-card-name">{species.label}</span>
+      <span className="gm-card-foot">
+        {owned ? (
+          planted ? (
+            "\u2605 planted"
+          ) : (
+            "in seed bank"
+          )
+        ) : (
+          <>
+            <TokenGlyph className="inline-block h-2.5 w-2.5" /> {price} tokens
+          </>
+        )}
+      </span>
+    </button>
+  );
+}
+
 function MenuGroup({
   label,
   children,
@@ -235,7 +451,7 @@ function ChipBody({
       {icon}
       <span className="text-[10px] uppercase tracking-wider">{label}</span>
       {value !== undefined && (
-        <span className="rounded bg-[#2d1b0d] px-1 text-[#f6e3bd]">{value}</span>
+        <span className="rounded bg-[var(--gm-inset)] px-1 text-[color:var(--gm-text)]">{value}</span>
       )}
       {test && (
         <span className="rounded border-[2px] border-current px-1 text-[8px] tracking-widest">
@@ -300,6 +516,10 @@ export default function TreeOfKnowledge({
   /** Hide the inline marker chips (shown in the Garden band). */
   hideMarkers?: boolean;
 }) {
+  // Developer controls (the Dev tab and what it opens) are Researcher-only.
+  const { mode: siteMode } = useSiteMode();
+  const devControls = siteMode === "researcher";
+
   const { count: treasures } = useHunt();
   const { unlocked } = useAchievements();
   const {
@@ -319,8 +539,12 @@ export default function TreeOfKnowledge({
     activeCheats,
   } = useSun();
 
-  /* The bottom-left Tree info card. */
-  const [infoOpen, setInfoOpen] = useState(true);
+  /* The bottom-left Tree info card. On a phone the 16:9 stage is so
+     short that the open card would hide the whole tree, so it starts
+     folded there. */
+  const [infoOpen, setInfoOpen] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 640,
+  );
 
   /* The shops open on click/tap only. The fertilizer HOLD applies
      by clicking the badge or dragging its ghost onto the tree —
@@ -344,6 +568,25 @@ export default function TreeOfKnowledge({
      in the speech bubble. */
   const [feedNote, setFeedNote] = useState<string | null>(null);
 
+  /* The frame the menu wears (wood, stone, parchment, ...): remembered,
+     and written on <html> while the garden is on screen so the dialogs
+     wear it too. */
+  const [frame, setFrameState] = useState(readFrame);
+  const setFrame = (id: string) => {
+    setFrameState(id);
+    try {
+      window.localStorage.setItem(FRAME_KEY, id);
+    } catch {
+      // best-effort
+    }
+  };
+
+  useEffect(() => {
+    // Stays on <html> after the garden closes: the cheat console and
+    // dialogs elsewhere in the app wear the same frame.
+    applyGardenFrame(frame);
+  }, [frame]);
+
   /* The tree card's own menu: the shop, skins, and wallet panes. */
   const [menu, setMenu] = useState<
     "info" | "shop" | "skins" | "themes" | "earn" | "wallet" | "charms" | "scene" | null
@@ -351,6 +594,23 @@ export default function TreeOfKnowledge({
   /* "Get info" reveals the research the tree holds; the default
      sidebar itself always shows the tree's name and fact card. */
   const [infoExpanded, setInfoExpanded] = useState(false);
+  /* The card is anchored to the stage's bottom edge, so expanding it
+     grows it upward and would leave the reader staring at the top of
+     the old content. Instead, once "Get info" opens, scroll the card's
+     own body to the newly revealed section and hand it focus without
+     scrolling the page. `infoOpen` is a dependency too: collapsing the
+     card unmounts the body, so re-opening it must land on the reveal
+     again rather than back at the tree's name. */
+  const infoBodyRef = useRef<HTMLDivElement | null>(null);
+  const infoRevealRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!infoOpen || !infoExpanded) return;
+    const body = infoBodyRef.current;
+    const reveal = infoRevealRef.current;
+    if (!body || !reveal) return;
+    body.scrollTop = Math.max(0, reveal.offsetTop - 6);
+    reveal.focus({ preventScroll: true });
+  }, [infoExpanded, infoOpen]);
 
   /* Backdrop themes: Meadow is the default; the Theme shop adds
      and applies the rest. */
@@ -707,6 +967,12 @@ export default function TreeOfKnowledge({
       woodpecker: "Rat-a-tat-tat! A drumroll on the bark.",
       oriole: "The oriole flits round its nest, singing.",
       slug: "The slug curls up and blows a slow bubble.",
+      hen: "Bawk! The giant's hen squats, and out rolls a golden egg.",
+      sleeper: "Hush. Beyond the briars a sleeper lies, a hundred years deep in a dream.",
+      rosefield: "A rose of the field. Double-click it and it bursts into petals.",
+      "rosefield-burst": "Pop! A burst of petals, and the rose will bloom again.",
+      giant: "Fee-fi-fo-fum! The great door booms, and somewhere a golden harp plays on.",
+      butterfly: "The butterfly startles, circles once and settles on another bloom.",
       sylph: "A sylph giggles, spins away and bursts into glitter.",
     };
 
@@ -905,7 +1171,7 @@ export default function TreeOfKnowledge({
       {/* ---------------- menu bar: tree, feed, shop --------------- */}
       <div
         ref={barRef}
-        className={`wood-board wood-rope-top flex flex-wrap items-start gap-x-3 gap-y-2 rounded-none border-x-0 border-t-0 px-3 pb-2.5 pt-4 ${
+        className={`wood-board wood-rope-top flex flex-col gap-2.5 rounded-none border-x-0 border-t-0 px-3 pb-3 pt-4 ${
           immersive
             ? drawerOpen
               ? "absolute inset-x-0 top-0 z-40 pr-40"
@@ -913,12 +1179,44 @@ export default function TreeOfKnowledge({
             : ""
         }`}
       >
-        <MenuGroup label="Tree">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <span className="gm-title font-pixelify text-base font-bold uppercase tracking-[0.18em]">
+              The Garden
+            </span>
+            <span className="wood-label font-mono text-[10px] font-bold uppercase tracking-[0.15em]">
+              {KNOWLEDGE_STAGES[stage]}
+              {" · "}
+              {height} ft
+              {" · "}
+              {handout
+                ? `${handout.learned}/${handout.eligible} learned`
+                : "0/0 learned"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <FramePicker frame={frame} onPick={setFrame} />
+            {/* the developer switch stands apart from the shops */}
+            {devControls && (
+              <MenuButton
+                test
+                active={menu === "wallet"}
+                onClick={() => setMenu(menu === "wallet" ? null : "wallet")}
+                title="Developer tab: test wallet, growth, looks and scenery controls"
+                label="Dev"
+              />
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-[1_1_22rem] lg:max-w-[min(100%,36rem)]">
+        <MenuGroup label="Seed bank">
         {/* the species picker: character-selector cards */}
         <div
           role="group"
           aria-label="Species picker"
-          className="flex items-center gap-1.5"
+          className="gm-bank"
           onKeyDown={(event) => {
             const owned = TREE_SPECIES.filter((sp) =>
               ownedSkins.includes(sp.id),
@@ -938,69 +1236,26 @@ export default function TreeOfKnowledge({
           }}
         >
 
-        {TREE_SPECIES.map((species) => {
-          const planted = species.id === speciesId;
-          const owned = ownedSkins.includes(species.id);
-          const price = TREE_SKIN_PRICES[species.id];
-
-          if (owned) {
-            return (
-              <button
-                key={species.id}
-                type="button"
-                onClick={() => chooseSpecies(species.id)}
-                aria-pressed={planted}
-                title={
-                  planted
-                    ? `${species.label} planted — swap with \u2190 \u2192`
-                    : `Plant the ${species.label}`
-                }
-                className={`flex w-16 shrink-0 flex-col items-center gap-0.5 rounded-lg border-[3px] px-1 py-1 transition-all duration-150 pixel-ease ${
-                  planted ? "wood-chip-lit" : "wood-chip"
-                }`}
-              >
-                <PixelSprite
-                  speciesId={species.id}
-                  scale={0.24}
-                />
-                <span className="font-mono text-[9px] font-bold uppercase">
-                  {species.label}
-                </span>
-                <span className="font-mono text-[8px] font-bold uppercase opacity-80">
-                  {planted ? "planted" : "seed"}
-                </span>
-              </button>
-            );
-          }
-
-          return (
-            <button
-              key={species.id}
-              type="button"
-              onClick={() => buySkin(species.id)}
-              title={`Locked — buy the ${species.label} skin for ${price} growth tokens`}
-              className="wood-chip-locked flex w-16 shrink-0 flex-col items-center gap-0.5 rounded-lg border-[3px] px-1 py-1 transition-all duration-150 pixel-ease hover:brightness-110"
-            >
-              <span
-                className="flex h-[30px] items-center justify-center text-[13px]"
-                aria-hidden="true"
-              >
-                {"\uD83D\uDD12"}
-              </span>
-              <span className="font-mono text-[9px] font-bold uppercase">
-                {species.label}
-              </span>
-              <span className="font-mono text-[8px] font-bold uppercase">
-                <TokenGlyph className="inline-block h-2.5 w-2.5" /> {price}
-              </span>
-            </button>
-          );
-        })}
+        {TREE_SPECIES.map((species) => (
+          <SpeciesCard
+            key={species.id}
+            species={species}
+            planted={species.id === speciesId}
+            owned={ownedSkins.includes(species.id)}
+            price={TREE_SKIN_PRICES[species.id]}
+            onChoose={() => chooseSpecies(species.id)}
+            onBuy={() => buySkin(species.id)}
+          />
+        ))}
 
         </div>
 
         </MenuGroup>
+        </div>
 
+        {/* the rest of the controls fill the space beside the seed bank, and
+            wrap under it when the card is narrow */}
+        <div className="flex min-w-0 flex-1 basis-[19rem] flex-wrap content-start items-start gap-3">
         <MenuGroup label="Feed">
           <MenuReadout
             icon={<Sprout className="h-3.5 w-3.5" />}
@@ -1063,7 +1318,7 @@ export default function TreeOfKnowledge({
             {fertilizerHold}
           </button>
 
-          <span aria-hidden="true" className="w-[2px] bg-[#2a190b]" />
+          <span aria-hidden="true" className="w-[2px] bg-[var(--gm-edge)]" />
 
           <div
             className="flex items-stretch"
@@ -1076,10 +1331,10 @@ export default function TreeOfKnowledge({
                 onClick={() => setFertMultiplier(amount)}
                 aria-pressed={fertMultiplier === amount}
                 title={`Apply ${amount}× from your hold`}
-                className={`w-8 border-l-[2px] border-[#2a190b] font-mono text-[11px] font-bold transition-colors pixel-ease ${
+                className={`w-8 border-l-[2px] border-[color:var(--gm-edge)] font-mono text-[11px] font-bold transition-colors pixel-ease ${
                   fertMultiplier === amount
                     ? "wood-chip-lit"
-                    : "text-[#2b1a0a] hover:bg-white/15"
+                    : "text-[color:var(--gm-ink)] hover:bg-white/15"
                 }`}
               >
                 {amount}×
@@ -1139,24 +1394,10 @@ export default function TreeOfKnowledge({
             icon={<Palette className="h-3.5 w-3.5" />}
             label="Themes"
           />
-          <MenuButton
-            test
-            active={menu === "wallet"}
-            onClick={() => setMenu(menu === "wallet" ? null : "wallet")}
-            title="Developer tab: test wallet, growth, looks and scenery controls"
-            label="Dev"
-          />
         </MenuGroup>
 
-        <span className="wood-label ml-auto self-end font-mono text-[10px] font-bold uppercase tracking-[0.15em]">
-          {KNOWLEDGE_STAGES[stage]}
-          {" · "}
-          {height} ft
-          {" · "}
-          {handout
-            ? `${handout.learned}/${handout.eligible} learned`
-            : "0/0 learned"}
-        </span>
+        </div>
+        </div>
       </div>
 
       {/* ---------------- garden bed: the animated landscape ------ */}
@@ -1180,23 +1421,28 @@ export default function TreeOfKnowledge({
         {/* TREE INFO — bottom-left card over the stage (in full
             screen it clears the action row while the menu is open) */}
         <div
-          className={`absolute left-3 z-30 w-[min(20rem,calc(100%-1.5rem))] ${
-            immersive && drawerOpen ? "bottom-16" : "bottom-3"
+          className={`absolute left-3 z-30 flex w-[min(20rem,calc(100%-1.5rem))] flex-col [overflow-anchor:none] ${
+            immersive && drawerOpen
+              ? "bottom-16 max-h-[calc(100%-5.25rem)]"
+              : "bottom-3 max-h-[calc(100%-1.5rem)]"
           }`}
         >
-          <div className="overflow-hidden rounded border-[3px] border-gray-900 bg-white/95">
+          <div className="flex min-h-0 flex-col overflow-hidden rounded border-[3px] border-gray-900 bg-white/95">
             <button
               type="button"
               onClick={() => setInfoOpen((value) => !value)}
               aria-expanded={infoOpen}
-              className="flex w-full items-center justify-between gap-2 border-b-[2px] border-gray-900 bg-canvas px-3 py-1.5 font-pixelify text-xs font-bold uppercase tracking-[0.15em] text-ink"
+              className="flex w-full shrink-0 items-center justify-between gap-2 border-b-[2px] border-gray-900 bg-canvas px-3 py-1.5 font-pixelify text-xs font-bold uppercase tracking-[0.15em] text-ink"
             >
               Tree info
               <span>{infoOpen ? "\u25BE" : "\u25B8"}</span>
             </button>
 
             {infoOpen && (
-              <div className="max-h-[36vh] overflow-y-auto p-3">
+              <div
+                ref={infoBodyRef}
+                className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-3"
+              >
                 <p className="font-pixelify text-base font-bold leading-tight text-ink">
                   {SPECIES_INFO[speciesId].name}
                 </p>
@@ -1217,7 +1463,7 @@ export default function TreeOfKnowledge({
                     Get info
                   </button>
                 ) : (
-                  <div>
+                  <div ref={infoRevealRef} tabIndex={-1} className="outline-none">
                     <span
                       role="status"
                       className="mb-2 mt-3 inline-block rounded border-[2px] border-gray-900 bg-accentSoft px-2 py-1 font-mono text-[10px] font-bold text-[#2b6e1e]"

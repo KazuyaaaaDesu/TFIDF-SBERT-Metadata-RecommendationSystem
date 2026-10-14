@@ -95,6 +95,7 @@ export function resetLooks() {
     ...DEFAULT_UI_CUSTOM,
     live: { ...DEFAULT_UI_CUSTOM.live, scene: c.live.scene, dim: c.live.dim },
     wallpaper: c.wallpaper,
+    type: c.type,
     discovered: c.discovered,
   }));
 }

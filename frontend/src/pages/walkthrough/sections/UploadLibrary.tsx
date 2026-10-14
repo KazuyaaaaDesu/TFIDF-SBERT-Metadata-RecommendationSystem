@@ -126,7 +126,7 @@ export function MyLibraryPage() {
           <WikiGallery cols={2} ids={["library-graph", "library-chat"]} />
           <WikiNote kind="note">
             Pro unlocks when any garden tree is grown past its Young stage (Young oak 1,500 fertilizer,
-            maple 1,450, birch 1,580, elm 1,600, redwood 1,350). Researcher mode also has a developer
+            maple 1,450, birch 1,580, elm 1,600, redwood 1,350, beanstalk 1,300, rose supervine 1,480). Researcher mode also has a developer
             override on the Garden's Developer tab. In Presentation mode Pro stays locked, with the copy
             "part of the PRO version".
           </WikiNote>

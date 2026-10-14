@@ -9,7 +9,7 @@ import test from "node:test";
 
 import { leafPixels } from "../src/utils/leafShapes.ts";
 
-const SHAPES = ["maple", "lobed", "birch", "elm", "redwood"];
+const SHAPES = ["maple", "lobed", "birch", "elm", "redwood", "bean", "rose", "sprig"];
 const SIZES = [1, 1.5, 2, 3, 4.5, 6.5, 9];
 
 test("every leaf leaves a mark at every size and turn", () => {

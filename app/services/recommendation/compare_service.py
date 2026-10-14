@@ -14,11 +14,13 @@ lexical / semantic / metadata / hybrid configurations.
 
 from __future__ import annotations
 
+import time
 from typing import Literal
 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.services.evaluation.battle_explain import explain_differences
 from app.services.recommendation.search_service import (
     search_papers as run_search,
 )
@@ -45,6 +47,12 @@ PIPELINE_COMPONENTS: dict[str, frozenset[str]] = {
     "sbert_metadata": frozenset({"sbert", "metadata"}),
     "tfidf_sbert_metadata": frozenset({"tfidf", "sbert", "metadata"}),
 }
+
+
+# A leader must clear the runner-up by this much captured share to count
+# as a decisive win. Recorded battles: median margin 0.007, and 9 of 11
+# full battles were decided by less than 0.02, i.e. by noise.
+MIN_DECISIVE_MARGIN = 0.02
 
 
 def _independence_weight(
@@ -85,6 +93,17 @@ class CompareRequest(BaseModel):
     mmr_pool: int = Field(default=50, ge=1, le=100)
     # Lab simulations should not pollute the Arena's battle history.
     record_battle: bool = True
+    # Research tag for the run being recorded, free text, e.g.
+    # "campaign-ml-text-5". Optional because casual use must not be
+    # forced to name its runs -- but a formal campaign run cannot be
+    # identified without one, and the label cannot be reconstructed
+    # from the query afterwards.
+    run_label: str | None = Field(default=None, max_length=200)
+    # Which of the campaign's subject classes this run belongs to.
+    # Optional for the same reason: no preset is enforced here, so a
+    # run outside the six classes is still recorded rather than
+    # rejected.
+    subject_class: str | None = Field(default=None, max_length=100)
 
 
 class RankedPaper(BaseModel):
@@ -92,6 +111,9 @@ class RankedPaper(BaseModel):
     title: str | None = None
     year: int | None = None
     score: float
+    # The weighted TF-IDF / S-BERT / metadata contributions behind the
+    # score (repository battles only); what "explain differences" reads.
+    components: dict[str, float] | None = None
 
 
 class PipelineBattle(BaseModel):
@@ -131,12 +153,34 @@ class WinnerResult(BaseModel):
     maximum possible weighted consensus, which puts pure and hybrid
     pipelines on the same scale. Ties are broken by the lower average
     consensus rank.
+
+    DESCRIPTIVE ONLY. This measures agreement with the other
+    pipelines on one query, not quality: it uses no ground truth and
+    carries no uncertainty, and it favours whichever pipeline sits
+    nearest the centre of the group. For a verdict about which
+    pipeline is better, run a tournament (evaluation/tournament.py),
+    which scores many queries against known relevance and tests the
+    differences.
     """
 
     pipeline_id: str
     metric: Literal["independence_weighted_consensus"]
     value: float
     avg_consensus_rank: float | None = None
+
+    # How decisive the win is. The consensus share is a close call far
+    # more often than not (on recorded battles the median lead over the
+    # runner-up was 0.007), so a leader is only a *decisive* leader when
+    # it clears the runner-up by MIN_DECISIVE_MARGIN; otherwise the
+    # battle is "too close to call" and the pipelines within that margin
+    # are listed as contenders. `decisive` is None only on results built
+    # before this existed.
+    margin: float | None = None
+    runner_up: str | None = None
+    decisive: bool | None = None
+    contenders: list[str] = []
+    shares: dict[str, float] = {}
+    min_margin: float = 0.02
 
 
 class CompareResponse(BaseModel):
@@ -147,6 +191,14 @@ class CompareResponse(BaseModel):
     consensus: list[ConsensusEntry]
     pairwise: list[PairwiseAgreement]
     winner: WinnerResult | None = None
+    # Set by the API once the battle has been recorded.
+    battle_id: int | None = None
+    # Quality against ground truth, when there is some (a seed-paper
+    # battle is scored against that paper's own references).
+    judgement: dict | None = None
+    # Where the pipelines disagreed and which signal drove each list
+    # (see evaluation/battle_explain.py).
+    differences: dict | None = None
 
 
 def _run_one(
@@ -186,6 +238,7 @@ def _run_one(
                 title=paper.title,
                 year=paper.publication_year,
                 score=round(score, 6),
+                components=result.get("components"),
             )
         )
 
@@ -195,7 +248,7 @@ def _run_one(
     return rank_map, score_map, ranked
 
 
-def compare_pipelines(
+def compare_pipelines_stream(
     *,
     db: Session,
     query: str | None,
@@ -204,19 +257,17 @@ def compare_pipelines(
     custom_weights: dict[str, float] | None = None,
     mmr_lambda: float | None = None,
     mmr_pool: int = 50,
-) -> CompareResponse:
-    """Run the six pipelines, plus an optional custom recipe as a
-    seventh "custom" pipeline (the Lab's recipes), and assemble the
-    comparison payload.
+):
+    """Run the pipelines one at a time, yielding as each finishes.
 
-    ``mmr_lambda`` (opt-in, 0..1) reranks every pipeline's results
-    with Maximal Marginal Relevance before assembly, so the Lab can
-    battle recipes with diversification on; ``None`` keeps the plain
-    score order.
+    Yields ``("start", [pipeline ids])``, then
+    ``("pipeline", PipelineBattle, seconds)`` per pipeline as it
+    completes, and last ``("done", CompareResponse)``. The progress a
+    caller shows is therefore real: it is the pipelines that have
+    actually returned.
     """
 
     rank_maps: dict[str, dict[int, int]] = {}
-    score_maps: dict[str, dict[int, float]] = {}
     battles: list[PipelineBattle] = []
 
     pipeline_order = list(PIPELINE_ORDER)
@@ -241,8 +292,11 @@ def compare_pipelines(
             if (weight or 0) > 0
         )
 
+    yield ("start", list(pipeline_order))
+
     for pipeline in pipeline_order:
-        rank_map, score_map, ranked = _run_one(
+        started = time.perf_counter()
+        rank_map, _score_map, ranked = _run_one(
             db=db,
             pipeline=pipeline,
             query=query,
@@ -256,23 +310,44 @@ def compare_pipelines(
         )
 
         rank_maps[pipeline] = rank_map
-        score_maps[pipeline] = score_map
-        battles.append(
-            PipelineBattle(id=pipeline, results=ranked)
-        )
+        battle = PipelineBattle(id=pipeline, results=ranked)
+        battles.append(battle)
 
-    # --------------------------------------------------------
-    # Consensus, pairwise agreement, and winner: shared assembly
-    # --------------------------------------------------------
+        yield ("pipeline", battle, time.perf_counter() - started)
 
-    return _assemble_comparison(
-        rank_maps=rank_maps,
-        battles=battles,
-        component_sets=component_sets,
-        query=query,
-        seed_paper_id=seed_paper_id,
-        top_k=top_k,
+    yield (
+        "done",
+        _assemble_comparison(
+            rank_maps=rank_maps,
+            battles=battles,
+            component_sets=component_sets,
+            query=query,
+            seed_paper_id=seed_paper_id,
+            top_k=top_k,
+        ),
     )
+
+
+def compare_pipelines(**kwargs) -> CompareResponse:
+    """Run the six pipelines, plus an optional custom recipe as a
+    seventh "custom" pipeline (the Lab's recipes), and assemble the
+    comparison payload.
+
+    ``mmr_lambda`` (opt-in, 0..1) reranks every pipeline's results
+    with Maximal Marginal Relevance before assembly, so the Lab can
+    battle recipes with diversification on; ``None`` keeps the plain
+    score order.
+    """
+
+    result = None
+
+    for event in compare_pipelines_stream(**kwargs):
+        if event[0] == "done":
+            result = event[1]
+
+    assert result is not None
+
+    return result
 
 
 def _assemble_comparison(
@@ -400,6 +475,12 @@ def _assemble_comparison(
         consensus=consensus,
         pairwise=pairwise,
         winner=winner,
+        differences=explain_differences(
+            {
+                battle.id: [r.model_dump() for r in battle.results]
+                for battle in battles
+            }
+        ),
     )
 
 
@@ -711,6 +792,57 @@ def _pick_winner(
         for position, entry in enumerate(consensus, start=1)
     }
 
+    shares, avg_ranks = consensus_shares(
+        rank_maps=rank_maps,
+        consensus_positions=consensus_positions,
+        consensus_size=len(consensus),
+        component_sets=component_sets,
+    )
+
+    if not shares:
+        return None
+
+    ordered = sorted(
+        shares,
+        key=lambda pipeline: (-shares[pipeline], avg_ranks[pipeline]),
+    )
+    leader = ordered[0]
+    runner_up = ordered[1] if len(ordered) > 1 else None
+    margin = (
+        shares[leader] - shares[runner_up] if runner_up is not None else None
+    )
+    contenders = [
+        pipeline
+        for pipeline in ordered
+        if shares[leader] - shares[pipeline] < MIN_DECISIVE_MARGIN
+    ]
+
+    return WinnerResult(
+        pipeline_id=leader,
+        metric="independence_weighted_consensus",
+        value=round(shares[leader], 4),
+        avg_consensus_rank=round(avg_ranks[leader], 2),
+        margin=round(margin, 4) if margin is not None else None,
+        runner_up=runner_up,
+        # Several pipelines inside the margin = no decisive leader.
+        decisive=(margin is not None and margin >= MIN_DECISIVE_MARGIN),
+        contenders=contenders,
+        shares={p: round(v, 4) for p, v in shares.items()},
+        min_margin=MIN_DECISIVE_MARGIN,
+    )
+
+
+def consensus_shares(
+    *,
+    rank_maps: dict[str, dict[int, int]],
+    consensus_positions: dict[int, int],
+    consensus_size: int,
+    component_sets: dict[str, frozenset[str]],
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Each pipeline's independence-weighted consensus share and its
+    average consensus rank (the tie-break). Pipelines with an empty
+    result list are skipped."""
+
     pipelines = list(rank_maps.keys())
 
     independence = {
@@ -729,8 +861,8 @@ def _pick_winner(
         for pipeline in pipelines
     }
 
-    winner: WinnerResult | None = None
-    best_key: tuple[float, float] | None = None
+    shares: dict[str, float] = {}
+    avg_ranks: dict[str, float] = {}
 
     for pipeline in pipelines:
         ranked_ids = list(rank_maps[pipeline].keys())
@@ -749,24 +881,12 @@ def _pick_winner(
         ) / len(ranked_ids)
 
         total_available = available[pipeline]
-        share = (
+        shares[pipeline] = (
             captured / total_available if total_available > 0 else 0.0
         )
-
-        avg_consensus_rank = sum(
-            consensus_positions.get(paper_id, len(consensus) + 1)
+        avg_ranks[pipeline] = sum(
+            consensus_positions.get(paper_id, consensus_size + 1)
             for paper_id in ranked_ids
         ) / len(ranked_ids)
 
-        key = (share, -avg_consensus_rank)
-
-        if best_key is None or key > best_key:
-            best_key = key
-            winner = WinnerResult(
-                pipeline_id=pipeline,
-                metric="independence_weighted_consensus",
-                value=round(share, 4),
-                avg_consensus_rank=round(avg_consensus_rank, 2),
-            )
-
-    return winner
+    return shares, avg_ranks

@@ -58,7 +58,7 @@
   --gray-900: 44 62 80;
   --gray-950: 26 35 44;
 
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: var(--font-body, "Inter", system-ui, sans-serif);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -100,7 +100,7 @@ button,
 input,
 select,
 textarea {
-  font-family: "Pixelify Sans", "Inter", system-ui, sans-serif;
+  font-family: var(--font-display, "Pixelify Sans", "Inter", system-ui, sans-serif);
   letter-spacing: 0.02em;
 }
 
@@ -109,7 +109,7 @@ textarea {
 @layer components {
   /* Retro display font for the header chrome and arcade labels. */
   .font-pixelify {
-    font-family: "Pixelify Sans", "Inter", system-ui, sans-serif;
+    font-family: var(--font-display, "Pixelify Sans", "Inter", system-ui, sans-serif);
     letter-spacing: 0.02em;
   }
 
@@ -142,7 +142,7 @@ textarea {
      labels run at 16px and compact filter labels at 14px. */
   .field-label {
     @apply block text-base font-bold text-ink;
-    font-family: "Pixelify Sans", "Inter", system-ui, sans-serif;
+    font-family: var(--font-display, "Pixelify Sans", "Inter", system-ui, sans-serif);
     letter-spacing: 0.03em;
   }
 
@@ -152,13 +152,13 @@ textarea {
   .paper-row { @apply border-b border-gray-200 px-4 py-4 transition-colors last:border-b-0 hover:bg-canvas; }
   .paper-title {
     @apply text-sm font-bold leading-5 text-ink hover:underline;
-    font-family: "Pixelify Sans", "Inter", system-ui, sans-serif;
+    font-family: var(--font-display, "Pixelify Sans", "Inter", system-ui, sans-serif);
   }
   .paper-actions { @apply mt-3 flex flex-wrap items-center gap-2; }
 
   .filter-label {
     @apply mb-1.5 block text-sm font-bold text-ink;
-    font-family: "Pixelify Sans", "Inter", system-ui, sans-serif;
+    font-family: var(--font-display, "Pixelify Sans", "Inter", system-ui, sans-serif);
     letter-spacing: 0.03em;
   }
 
@@ -788,23 +788,282 @@ textarea {
 }
 
 /* ============================================================
-   WOOD — the garden's carved menu.
-   Fixed colors on purpose: wood looks like wood in light and dark
-   mode alike. Text on dark wood is cream (about 8:1), on light wood
-   dark brown (about 5:1).
+   THE GARDEN'S FRAME — the carved menu, in six themes.
+   Every color is a variable, set on :root for the wood and
+   overridden by html[data-garden-theme="…"] for the others (the
+   garden sets the attribute while it is on screen, so the pop-up
+   dialogs, which live outside the card, wear the same frame).
+   Fixed colors on purpose: a frame looks the same in light and
+   dark mode. Text on the dark board is light (about 8:1); text on
+   the chips and pages is dark (about 5:1 or better).
    ============================================================ */
+:root {
+  --gm-board: #5b3a1e;
+  --gm-board-hi: rgba(255, 214, 150, 0.16);
+  --gm-board-lo: rgba(0, 0, 0, 0.24);
+  --gm-grain-a: rgba(0, 0, 0, 0.16);
+  --gm-grain-b: rgba(255, 210, 150, 0.07);
+  --gm-edge: #2a190b;
+  --gm-edge2: #20120a;
+  --gm-text: #f6e3bd;
+  --gm-label: #f3d9a0;
+  --gm-label-shadow: #1a0e06;
+  --gm-plaque: #3c2410;
+  --gm-chip: #b98a52;
+  --gm-chip-hi: rgba(255, 232, 180, 0.38);
+  --gm-chip-line: rgba(90, 52, 20, 0.16);
+  --gm-ink: #2b1a0a;
+  --gm-lit: #f0b848;
+  --gm-lit-hi: rgba(255, 246, 200, 0.6);
+  --gm-lit-glow: rgba(240, 184, 72, 0.55);
+  --gm-inset: #2d1b0d;
+  --gm-locked: #4a3018;
+  --gm-locked-text: #e9d3a6;
+  --gm-page: #d9b983;
+  --gm-page-hi: rgba(255, 244, 214, 0.45);
+  --gm-page-edge: #4a2c12;
+  --gm-tag: #c79a5f;
+  --gm-tag-on: #f0c05a;
+  --gm-tag-locked: #7a5a38;
+  --gm-tag-locked-text: #f0e0bc;
+  --gm-cord: #d9bb7a;
+  --gm-peg: #3a2410;
+  --gm-peg-knob: #b98a52;
+  --gm-peg-on: #c9822a;
+  --gm-peg-knob-on: #fff2c8;
+  --gm-trim-a: #d9bb7a;
+  --gm-trim-b: #a98a50;
+  --gm-nail: #cfc8b8;
+  --gm-nail-edge: #6b655a;
+  --gm-card: #f2e3bd;
+  --gm-card-art: #8fb7d8;
+  --gm-card-ink: #2b1a0a;
+  --gm-planted-ink: #7a4a00;
+}
+html[data-garden-theme="stone"] {
+  --gm-board: #4b505c;
+  --gm-board-hi: rgba(220, 230, 245, 0.16);
+  --gm-board-lo: rgba(0, 0, 0, 0.28);
+  --gm-grain-a: rgba(0, 0, 0, 0.2);
+  --gm-grain-b: rgba(230, 238, 250, 0.08);
+  --gm-edge: #1b1e26;
+  --gm-edge2: #14161c;
+  --gm-text: #e8edf5;
+  --gm-label: #c9d4e6;
+  --gm-label-shadow: #0d0f14;
+  --gm-plaque: #2f333d;
+  --gm-chip: #a2abbb;
+  --gm-chip-hi: rgba(255, 255, 255, 0.4);
+  --gm-chip-line: rgba(40, 48, 64, 0.18);
+  --gm-ink: #1a1e27;
+  --gm-lit: #7fe0cc;
+  --gm-lit-hi: rgba(235, 255, 250, 0.6);
+  --gm-lit-glow: rgba(127, 224, 204, 0.55);
+  --gm-inset: #23262e;
+  --gm-locked: #3a3e48;
+  --gm-locked-text: #cfd7e6;
+  --gm-page: #c9d0dc;
+  --gm-page-hi: rgba(255, 255, 255, 0.45);
+  --gm-page-edge: #2d323e;
+  --gm-tag: #aab3c3;
+  --gm-tag-on: #8ae6d3;
+  --gm-tag-locked: #666d7c;
+  --gm-tag-locked-text: #e6ebf4;
+  --gm-cord: #c9d0dc;
+  --gm-peg: #2a2d36;
+  --gm-peg-knob: #a2abbb;
+  --gm-peg-on: #3fb7a0;
+  --gm-peg-knob-on: #eafff9;
+  --gm-trim-a: #c9d0dc;
+  --gm-trim-b: #868fa0;
+  --gm-nail: #dfe6f2;
+  --gm-nail-edge: #4a505c;
+  --gm-card: #dfe4ee;
+  --gm-card-art: #9db4d0;
+  --gm-card-ink: #1a1e27;
+}
+html[data-garden-theme="parchment"] {
+  --gm-board: #e6d5aa;
+  --gm-board-hi: rgba(255, 250, 230, 0.5);
+  --gm-board-lo: rgba(120, 90, 40, 0.16);
+  --gm-grain-a: rgba(120, 90, 40, 0.1);
+  --gm-grain-b: rgba(255, 255, 255, 0.22);
+  --gm-edge: #5a4020;
+  --gm-edge2: #46301a;
+  --gm-text: #33230f;
+  --gm-label: #5a3d16;
+  --gm-label-shadow: transparent;
+  --gm-plaque: #d3bd8a;
+  --gm-chip: #fbf3da;
+  --gm-chip-hi: rgba(255, 255, 255, 0.6);
+  --gm-chip-line: rgba(120, 90, 40, 0.1);
+  --gm-ink: #33230f;
+  --gm-lit: #f1ac3a;
+  --gm-lit-hi: rgba(255, 244, 200, 0.7);
+  --gm-lit-glow: rgba(241, 172, 58, 0.5);
+  --gm-inset: #c5ac74;
+  --gm-locked: #cdb88a;
+  --gm-locked-text: #4a3414;
+  --gm-page: #f6ecd0;
+  --gm-page-hi: rgba(255, 255, 255, 0.55);
+  --gm-page-edge: #6b4f25;
+  --gm-tag: #efdfae;
+  --gm-tag-on: #f6c25c;
+  --gm-tag-locked: #cdb88a;
+  --gm-tag-locked-text: #4a3414;
+  --gm-cord: #8a6a30;
+  --gm-peg: #b89d62;
+  --gm-peg-knob: #fbf3da;
+  --gm-peg-on: #d98a22;
+  --gm-peg-knob-on: #fffbe8;
+  --gm-trim-a: #8a6a30;
+  --gm-trim-b: #5a4020;
+  --gm-nail: #d8b45c;
+  --gm-nail-edge: #5a4020;
+  --gm-card: #fffaf0;
+  --gm-card-art: #a9cfe6;
+  --gm-card-ink: #33230f;
+}
+html[data-garden-theme="midnight"] {
+  --gm-board: #1c2246;
+  --gm-board-hi: rgba(150, 180, 255, 0.14);
+  --gm-board-lo: rgba(0, 0, 10, 0.3);
+  --gm-grain-a: rgba(0, 0, 20, 0.22);
+  --gm-grain-b: rgba(160, 190, 255, 0.07);
+  --gm-edge: #070a1c;
+  --gm-edge2: #050714;
+  --gm-text: #dbe6ff;
+  --gm-label: #a9c0ff;
+  --gm-label-shadow: #03040c;
+  --gm-plaque: #121734;
+  --gm-chip: #35417e;
+  --gm-chip-hi: rgba(170, 195, 255, 0.28);
+  --gm-chip-line: rgba(10, 14, 40, 0.3);
+  --gm-ink: #eef3ff;
+  --gm-lit: #ffd36e;
+  --gm-lit-hi: rgba(255, 246, 210, 0.6);
+  --gm-lit-glow: rgba(255, 211, 110, 0.55);
+  --gm-inset: #0b0f28;
+  --gm-locked: #232a5a;
+  --gm-locked-text: #b9c8f5;
+  --gm-page: #2a3270;
+  --gm-page-hi: rgba(170, 195, 255, 0.2);
+  --gm-page-edge: #0a0e26;
+  --gm-tag: #3f4c94;
+  --gm-tag-on: #ffd36e;
+  --gm-tag-locked: #232a5a;
+  --gm-tag-locked-text: #b9c8f5;
+  --gm-cord: #a9c0ff;
+  --gm-peg: #0b0f28;
+  --gm-peg-knob: #7f90d6;
+  --gm-peg-on: #e0a93a;
+  --gm-peg-knob-on: #fff6d8;
+  --gm-trim-a: #a9c0ff;
+  --gm-trim-b: #5e72c4;
+  --gm-nail: #dbe6ff;
+  --gm-nail-edge: #35417e;
+  --gm-card: #26306a;
+  --gm-card-art: #1d2755;
+  --gm-card-ink: #eef3ff;
+  --gm-planted-ink: #ffd36e;
+}
+html[data-garden-theme="meadow"] {
+  --gm-board: #2e5a30;
+  --gm-board-hi: rgba(190, 255, 150, 0.16);
+  --gm-board-lo: rgba(0, 20, 0, 0.26);
+  --gm-grain-a: rgba(0, 30, 0, 0.18);
+  --gm-grain-b: rgba(190, 255, 140, 0.08);
+  --gm-edge: #10270f;
+  --gm-edge2: #0b1c0a;
+  --gm-text: #f3fadb;
+  --gm-label: #d6ef9a;
+  --gm-label-shadow: #08160a;
+  --gm-plaque: #1f3f21;
+  --gm-chip: #a5d46c;
+  --gm-chip-hi: rgba(255, 255, 220, 0.42);
+  --gm-chip-line: rgba(20, 70, 20, 0.16);
+  --gm-ink: #123012;
+  --gm-lit: #ffe36a;
+  --gm-lit-hi: rgba(255, 255, 215, 0.65);
+  --gm-lit-glow: rgba(255, 227, 106, 0.55);
+  --gm-inset: #173418;
+  --gm-locked: #305a30;
+  --gm-locked-text: #d3efb0;
+  --gm-page: #d8ecb0;
+  --gm-page-hi: rgba(255, 255, 230, 0.5);
+  --gm-page-edge: #1f4a20;
+  --gm-tag: #b4dc82;
+  --gm-tag-on: #ffe36a;
+  --gm-tag-locked: #5e8a50;
+  --gm-tag-locked-text: #f0fadb;
+  --gm-cord: #e8d28a;
+  --gm-peg: #173418;
+  --gm-peg-knob: #a5d46c;
+  --gm-peg-on: #5aae3a;
+  --gm-peg-knob-on: #f6ffd8;
+  --gm-trim-a: #e8d28a;
+  --gm-trim-b: #b09a50;
+  --gm-nail: #f3fadb;
+  --gm-nail-edge: #46602e;
+  --gm-card: #eaf5c8;
+  --gm-card-art: #9ed3ec;
+  --gm-card-ink: #123012;
+}
+html[data-garden-theme="blossom"] {
+  --gm-board: #7a2c52;
+  --gm-board-hi: rgba(255, 190, 220, 0.18);
+  --gm-board-lo: rgba(40, 0, 20, 0.28);
+  --gm-grain-a: rgba(50, 0, 25, 0.18);
+  --gm-grain-b: rgba(255, 200, 225, 0.08);
+  --gm-edge: #36101f;
+  --gm-edge2: #280a16;
+  --gm-text: #ffe9f2;
+  --gm-label: #ffc4dc;
+  --gm-label-shadow: #1e0610;
+  --gm-plaque: #561d3a;
+  --gm-chip: #f2a5c0;
+  --gm-chip-hi: rgba(255, 245, 250, 0.45);
+  --gm-chip-line: rgba(100, 20, 55, 0.16);
+  --gm-ink: #4a1530;
+  --gm-lit: #ffd36e;
+  --gm-lit-hi: rgba(255, 250, 220, 0.65);
+  --gm-lit-glow: rgba(255, 211, 110, 0.5);
+  --gm-inset: #3f1429;
+  --gm-locked: #6a2748;
+  --gm-locked-text: #ffd5e6;
+  --gm-page: #fbdce8;
+  --gm-page-hi: rgba(255, 255, 255, 0.55);
+  --gm-page-edge: #5a1f3c;
+  --gm-tag: #f4b6cd;
+  --gm-tag-on: #ffd36e;
+  --gm-tag-locked: #8a4a68;
+  --gm-tag-locked-text: #ffe9f2;
+  --gm-cord: #ffc4dc;
+  --gm-peg: #3f1429;
+  --gm-peg-knob: #f2a5c0;
+  --gm-peg-on: #d6457f;
+  --gm-peg-knob-on: #fff0f6;
+  --gm-trim-a: #ffc4dc;
+  --gm-trim-b: #d27aa0;
+  --gm-nail: #fff0f6;
+  --gm-nail-edge: #7a2c52;
+  --gm-card: #ffeef5;
+  --gm-card-art: #b8d8f0;
+  --gm-card-ink: #4a1530;
+}
+
 .wood-board {
   position: relative;
-  background-color: #5b3a1e;
+  background-color: var(--gm-board);
   background-image:
-    linear-gradient(180deg, rgba(255, 214, 150, 0.16), rgba(0, 0, 0, 0.24)),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.16) 0 2px, transparent 2px 7px, rgba(255, 210, 150, 0.07) 7px 8px, transparent 8px 19px),
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 26px);
-  border: 3px solid #2a190b;
+    linear-gradient(180deg, var(--gm-board-hi), var(--gm-board-lo)),
+    repeating-linear-gradient(90deg, var(--gm-grain-a) 0 2px, transparent 2px 7px, var(--gm-grain-b) 7px 8px, transparent 8px 19px),
+    repeating-linear-gradient(0deg, var(--gm-grain-a) 0 1px, transparent 1px 26px);
+  border: 3px solid var(--gm-edge);
   box-shadow:
-    inset 0 2px 0 rgba(255, 214, 150, 0.28),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.35);
-  color: #f6e3bd;
+    inset 0 2px 0 var(--gm-board-hi),
+    inset 0 -3px 0 var(--gm-board-lo);
+  color: var(--gm-text);
 }
 /* a twisted rope along the top edge, tied off at a nail on each end */
 .wood-rope-top::before {
@@ -815,88 +1074,88 @@ textarea {
   top: 3px;
   height: 6px;
   background:
-    radial-gradient(circle at 4px 3px, #cfc8b8 0 2.5px, #6b655a 3px, transparent 3.5px) left top / 8px 6px no-repeat,
-    radial-gradient(circle at 4px 3px, #cfc8b8 0 2.5px, #6b655a 3px, transparent 3.5px) right top / 8px 6px no-repeat,
-    repeating-linear-gradient(45deg, #d9bb7a 0 3px, #a98a50 3px 6px) 8px 1px / calc(100% - 16px) 4px no-repeat;
+    radial-gradient(circle at 4px 3px, var(--gm-nail) 0 2.5px, var(--gm-nail-edge) 3px, transparent 3.5px) left top / 8px 6px no-repeat,
+    radial-gradient(circle at 4px 3px, var(--gm-nail) 0 2.5px, var(--gm-nail-edge) 3px, transparent 3.5px) right top / 8px 6px no-repeat,
+    repeating-linear-gradient(45deg, var(--gm-trim-a) 0 3px, var(--gm-trim-b) 3px 6px) 8px 1px / calc(100% - 16px) 4px no-repeat;
   pointer-events: none;
 }
 
 /* a darker plaque that holds one group of controls */
 .wood-plaque {
   position: relative;
-  background-color: #3c2410;
+  background-color: var(--gm-plaque);
   background-image:
     linear-gradient(180deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.05)),
-    repeating-linear-gradient(90deg, rgba(255, 210, 150, 0.05) 0 1px, transparent 1px 11px);
-  border: 2px solid #20120a;
+    repeating-linear-gradient(90deg, var(--gm-grain-b) 0 1px, transparent 1px 11px);
+  border: 2px solid var(--gm-edge2);
   border-radius: 6px;
-  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 214, 150, 0.2);
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.35), 0 1px 0 var(--gm-board-hi);
 }
 .wood-label {
   font-family: inherit;
-  color: #f3d9a0;
-  text-shadow: 0 1px 0 #1a0e06;
+  color: var(--gm-label);
+  text-shadow: 0 1px 0 var(--gm-label-shadow);
 }
 /* a raised plank you can press */
 .wood-chip {
-  background-color: #b98a52;
+  background-color: var(--gm-chip);
   background-image:
-    linear-gradient(180deg, rgba(255, 232, 180, 0.38), rgba(0, 0, 0, 0.12)),
-    repeating-linear-gradient(90deg, rgba(90, 52, 20, 0.16) 0 1px, transparent 1px 6px);
-  border-color: #2a190b;
-  color: #2b1a0a;
-  box-shadow: inset 0 1px 0 rgba(255, 240, 200, 0.55), 0 2px 0 #20120a;
+    linear-gradient(180deg, var(--gm-chip-hi), rgba(0, 0, 0, 0.12)),
+    repeating-linear-gradient(90deg, var(--gm-chip-line) 0 1px, transparent 1px 6px);
+  border-color: var(--gm-edge);
+  color: var(--gm-ink);
+  box-shadow: inset 0 1px 0 var(--gm-chip-hi), 0 2px 0 var(--gm-edge2);
 }
 .wood-chip:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 .wood-chip:active:not(:disabled) {
   transform: translateY(1px);
-  box-shadow: inset 0 1px 0 rgba(255, 240, 200, 0.4), 0 1px 0 #20120a;
+  box-shadow: inset 0 1px 0 var(--gm-chip-hi), 0 1px 0 var(--gm-edge2);
 }
 /* pressed and glowing, like a lit lantern behind amber glass */
 .wood-chip-lit {
-  background-color: #f0b848;
-  background-image: linear-gradient(180deg, rgba(255, 246, 200, 0.6), rgba(160, 90, 10, 0.2));
-  border-color: #2a190b;
-  color: #2b1a0a;
-  box-shadow: inset 0 2px 0 rgba(120, 60, 0, 0.35), 0 0 8px rgba(240, 184, 72, 0.55);
+  background-color: var(--gm-lit);
+  background-image: linear-gradient(180deg, var(--gm-lit-hi), rgba(0, 0, 0, 0.14));
+  border-color: var(--gm-edge);
+  color: #231606;
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.25), 0 0 8px var(--gm-lit-glow);
 }
 /* a dark inset read-out */
 .wood-chip-inset {
-  background-color: #2d1b0d;
+  background-color: var(--gm-inset);
   background-image: linear-gradient(180deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.05));
-  border-color: #20120a;
-  color: #f6e3bd;
+  border-color: var(--gm-edge2);
+  color: var(--gm-text);
   box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.5);
 }
 .wood-chip-locked {
-  background-color: #4a3018;
-  border-color: #20120a;
+  background-color: var(--gm-locked);
+  border-color: var(--gm-edge2);
   border-style: dashed;
-  color: #e9d3a6;
+  color: var(--gm-locked-text);
   box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.35);
 }
-/* the almanac's pages: light, warm wood for reading */
+/* the almanac's pages: light, for reading */
 .wood-page {
-  background-color: #d9b983;
+  background-color: var(--gm-page);
   background-image:
-    linear-gradient(180deg, rgba(255, 244, 214, 0.45), rgba(120, 76, 30, 0.12)),
-    repeating-linear-gradient(90deg, rgba(110, 70, 28, 0.1) 0 1px, transparent 1px 9px);
-  color: #2b1a0a;
-  border: 2px solid #4a2c12;
+    linear-gradient(180deg, var(--gm-page-hi), rgba(0, 0, 0, 0.08)),
+    repeating-linear-gradient(90deg, var(--gm-chip-line) 0 1px, transparent 1px 9px);
+  color: var(--gm-ink);
+  border: 2px solid var(--gm-page-edge);
 }
 /* a hanging tag: a charm on its cord */
 .wood-tag {
   position: relative;
-  background-color: #c79a5f;
+  background-color: var(--gm-tag);
   background-image:
-    linear-gradient(180deg, rgba(255, 238, 190, 0.42), rgba(0, 0, 0, 0.1)),
-    repeating-linear-gradient(90deg, rgba(90, 52, 20, 0.14) 0 1px, transparent 1px 7px);
-  border: 3px solid #2a190b;
+    linear-gradient(180deg, var(--gm-chip-hi), rgba(0, 0, 0, 0.1)),
+    repeating-linear-gradient(90deg, var(--gm-chip-line) 0 1px, transparent 1px 7px);
+  border: 3px solid var(--gm-edge);
   border-radius: 6px 6px 10px 10px;
-  color: #2b1a0a;
-  box-shadow: inset 0 1px 0 rgba(255, 244, 210, 0.6), 3px 3px 0 rgba(32, 18, 10, 0.4);
+  color: var(--gm-ink);
+  box-shadow: inset 0 1px 0 var(--gm-chip-hi), 3px 3px 0 rgba(0, 0, 0, 0.35);
 }
 .wood-tag::before {
   content: "";
@@ -905,18 +1164,18 @@ textarea {
   top: -9px;
   width: 2px;
   height: 9px;
-  background: #d9bb7a;
-  border-left: 1px solid #5a4222;
-  border-right: 1px solid #5a4222;
+  background: var(--gm-cord);
+  border-left: 1px solid var(--gm-edge);
+  border-right: 1px solid var(--gm-edge);
 }
 .wood-tag-on {
-  background-color: #f0c05a;
-  box-shadow: inset 0 1px 0 rgba(255, 248, 210, 0.7), 3px 3px 0 rgba(32, 18, 10, 0.4), 0 0 14px rgba(240, 184, 72, 0.6);
+  background-color: var(--gm-tag-on);
+  box-shadow: inset 0 1px 0 var(--gm-lit-hi), 3px 3px 0 rgba(0, 0, 0, 0.35), 0 0 14px var(--gm-lit-glow);
 }
 .wood-tag-locked {
-  background-color: #7a5a38;
+  background-color: var(--gm-tag-locked);
   background-image: repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 7px);
-  color: #f0e0bc;
+  color: var(--gm-tag-locked-text);
   border-style: dashed;
   box-shadow: none;
 }
@@ -925,9 +1184,9 @@ textarea {
   display: inline-block;
   width: 38px;
   height: 18px;
-  border: 2px solid #2a190b;
+  border: 2px solid var(--gm-edge);
   border-radius: 9px;
-  background: #3a2410;
+  background: var(--gm-peg);
   box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.5);
 }
 .wood-peg::after {
@@ -938,16 +1197,198 @@ textarea {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #b98a52;
-  border: 2px solid #2a190b;
+  background: var(--gm-peg-knob);
+  border: 2px solid var(--gm-edge);
   transition: transform 0.12s steps(3, end);
 }
 .wood-peg[aria-checked="true"] {
-  background: #c9822a;
+  background: var(--gm-peg-on);
 }
 .wood-peg[aria-checked="true"]::after {
   transform: translateX(20px);
-  background: #fff2c8;
+  background: var(--gm-peg-knob-on);
+}
+.wood-value {
+  background-color: var(--gm-inset);
+  color: var(--gm-text);
+}
+
+/* ---------------- the seed bank: species as cards ---------------- */
+.gm-bank {
+  display: flex;
+  gap: 8px;
+  padding: 6px 4px 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gm-chip) var(--gm-inset);
+  /* the cards fade at the edges to show there are more */
+  mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 22px), transparent 100%);
+}
+.gm-card {
+  --card-a: #48c96e;
+  --card-b: #155e2b;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 84px;
+  scroll-snap-align: start;
+  padding: 4px;
+  border: 3px solid var(--gm-edge);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(0, 0, 0, 0.06)),
+    var(--gm-card);
+  color: var(--gm-card-ink);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35), 0 3px 0 var(--gm-edge2), 0 6px 10px rgba(0, 0, 0, 0.3);
+  transition: transform 0.12s steps(3, end), box-shadow 0.12s steps(3, end);
+  cursor: pointer;
+}
+.gm-card:hover {
+  transform: translateY(-3px) rotate(-1deg);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.45), 0 5px 0 var(--gm-edge2), 0 10px 14px rgba(0, 0, 0, 0.32);
+}
+.gm-card:focus-visible {
+  outline: 3px solid var(--gm-lit);
+  outline-offset: 2px;
+}
+.gm-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 0 2px 2px;
+  font: 700 8px/1 ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.gm-card-pips {
+  display: inline-flex;
+  gap: 2px;
+}
+.gm-card-pips i {
+  width: 5px;
+  height: 5px;
+  border: 1px solid var(--gm-edge);
+  background: var(--card-a);
+  transform: rotate(45deg);
+}
+.gm-card-pips i[data-off] {
+  background: transparent;
+  opacity: 0.45;
+}
+.gm-card-art {
+  position: relative;
+  display: grid;
+  place-items: end center;
+  height: 64px;
+  overflow: hidden;
+  border: 2px solid var(--gm-edge);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, var(--gm-card-art) 0 68%, color-mix(in srgb, var(--card-b) 30%, #3f7a3a) 68% 100%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+.gm-card-art::after {
+  /* a shine across the art window */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.28) 46%, transparent 54%);
+  background-size: 220% 100%;
+  background-position: 120% 0;
+  pointer-events: none;
+}
+.gm-card:hover .gm-card-art::after {
+  animation: gm-shine 0.7s steps(7, end) 1;
+}
+@keyframes gm-shine {
+  to {
+    background-position: -40% 0;
+  }
+}
+.gm-card-name {
+  margin: 4px -1px 0;
+  padding: 2px 3px;
+  border: 2px solid var(--gm-edge);
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--card-a), var(--card-b));
+  color: #fff;
+  text-align: center;
+  font: 700 9px/1.1 ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+.gm-card-foot {
+  margin-top: 3px;
+  min-height: 12px;
+  text-align: center;
+  font: 700 8px/12px ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.gm-card[aria-pressed="true"] {
+  border-color: var(--gm-lit);
+  transform: translateY(-4px);
+  box-shadow: inset 0 0 0 2px var(--gm-lit-hi), 0 4px 0 var(--gm-edge2), 0 0 16px var(--gm-lit-glow);
+}
+.gm-card[aria-pressed="true"] .gm-card-foot {
+  color: var(--gm-planted-ink, #7a4a00);
+}
+.gm-card[data-locked] {
+  border-style: dashed;
+  background: var(--gm-locked);
+  color: var(--gm-locked-text);
+}
+.gm-card[data-locked] .gm-card-art {
+  filter: grayscale(1) brightness(0.55);
+}
+.gm-card[data-locked] .gm-card-name {
+  filter: grayscale(0.7) brightness(0.7);
+}
+.gm-card-lock {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* ---------------- the menu: header and the frame picker ---------------- */
+.gm-title {
+  font-family: inherit;
+  color: var(--gm-text);
+  text-shadow: 0 2px 0 var(--gm-label-shadow);
+}
+.gm-frames {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.gm-frame {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--gm-edge2);
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35), 0 2px 0 var(--gm-edge2);
+  transition: transform 0.1s steps(2, end);
+  cursor: pointer;
+}
+.gm-frame:hover {
+  transform: translateY(-1px);
+}
+.gm-frame[aria-pressed="true"] {
+  outline: 2px solid var(--gm-text);
+  outline-offset: 1px;
+  transform: translateY(-1px);
+}
+.gm-frame:focus-visible {
+  outline: 2px solid var(--gm-lit);
+  outline-offset: 2px;
 }
 
 /* Cluster guides on the similar-papers graph: a leader line that draws
@@ -1115,4 +1556,303 @@ html[data-pixelfont] body *:not(svg):not(svg *) {
 /* --- The live background: the garden's scene behind the page --- */
 .live-bg canvas {
   object-fit: cover;
+}
+
+
+/* --- Developer type tweaks (see utils/uiCustom.ts, TypeTweaks) --- */
+body {
+  letter-spacing: var(--type-tracking, normal);
+  line-height: var(--type-leading, normal);
+}
+html[data-font-body] body,
+html[data-font-body][data-skin] body,
+html[data-font-body][data-skin] input,
+html[data-font-body][data-skin] textarea,
+html[data-font-body][data-skin] select {
+  font-family: var(--font-body);
+}
+html[data-font-heading] h1,
+html[data-font-heading] h2,
+html[data-font-heading] h3,
+html[data-font-heading] h4,
+html[data-font-heading][data-skin] h1,
+html[data-font-heading][data-skin] h2,
+html[data-font-heading][data-skin] h3,
+html[data-font-heading][data-skin] button,
+html[data-font-heading] .font-pixelify {
+  font-family: var(--font-display);
+}
+
+/* ============================================================
+   LAB — the notebook / instrument-bench look
+   Graph paper, specimen cards with a label and a strip of tape,
+   graduated dials. Built from the theme tokens, so skins and dark
+   mode carry through. Used only by the Lab and its sweep.
+   ============================================================ */
+.lab-sheet {
+  position: relative;
+  border: 2px solid rgb(var(--gray-900));
+  border-radius: 6px;
+  padding: 1.25rem;
+  background-color: rgb(var(--canvas));
+  background-image:
+    linear-gradient(rgb(var(--gray-900) / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--gray-900) / 0.07) 1px, transparent 1px),
+    linear-gradient(rgb(var(--gray-900) / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--gray-900) / 0.035) 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 16px 16px, 16px 16px;
+}
+
+.lab-hazard {
+  height: 8px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgb(var(--accent)) 0 10px,
+    rgb(var(--gray-900)) 10px 20px
+  );
+}
+
+.lab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  margin-top: 0.4rem;
+  font-family: "Pixelify Sans", "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(var(--muted));
+}
+
+.lab-card {
+  position: relative;
+  padding: 1.6rem 1rem 1rem;
+  border: 2px solid rgb(var(--gray-900));
+  border-radius: 4px;
+  background: rgb(var(--surface));
+  color: rgb(var(--ink));
+  box-shadow: 4px 4px 0 rgb(var(--gray-900) / 0.16);
+}
+/* a strip of tape holding the specimen card */
+.lab-card::after {
+  content: "";
+  position: absolute;
+  top: -7px;
+  right: 22px;
+  width: 44px;
+  height: 13px;
+  background: rgb(var(--accent) / 0.4);
+  transform: rotate(3deg);
+  pointer-events: none;
+}
+.lab-card--flat::after { display: none; }
+.lab-card--ink {
+  background: rgb(var(--gray-900));
+  color: rgb(var(--on-ink));
+  border-color: rgb(var(--gray-900));
+}
+
+.lab-label {
+  position: absolute;
+  top: 0;
+  left: 12px;
+  transform: translateY(-50%);
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: rgb(var(--gray-900));
+  color: rgb(var(--on-ink));
+  font-family: "Pixelify Sans", "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.lab-label--hot { background: rgb(var(--accent)); color: rgb(var(--on-accent)); }
+
+.lab-readout {
+  min-width: 3.4rem;
+  padding: 2px 6px;
+  border: 2px solid rgb(var(--gray-900));
+  border-radius: 2px;
+  background: rgb(var(--field));
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--ink));
+}
+
+/* graduated range input: a thin track, ticks every 10%, a square thumb */
+.lab-dial { position: relative; height: 26px; }
+.lab-dial-ticks {
+  position: absolute;
+  inset: 17px 0 auto 0;
+  height: 6px;
+  background: repeating-linear-gradient(
+    to right,
+    rgb(var(--gray-900) / 0.55) 0 1px,
+    transparent 1px 10%
+  );
+  border-right: 1px solid rgb(var(--gray-900) / 0.55);
+  pointer-events: none;
+}
+input[type="range"].lab-range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+input[type="range"].lab-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 1px solid rgb(var(--gray-900));
+  background: linear-gradient(
+    to right,
+    rgb(var(--signal, var(--accent))) 0 var(--fill, 0%),
+    rgb(var(--gray-300)) var(--fill, 0%) 100%
+  );
+}
+input[type="range"].lab-range::-moz-range-track {
+  height: 6px;
+  border: 1px solid rgb(var(--gray-900));
+  background: linear-gradient(
+    to right,
+    rgb(var(--signal, var(--accent))) 0 var(--fill, 0%),
+    rgb(var(--gray-300)) var(--fill, 0%) 100%
+  );
+}
+input[type="range"].lab-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 20px;
+  margin-top: -8px;
+  border: 2px solid rgb(var(--gray-900));
+  border-radius: 2px;
+  background: rgb(var(--surface));
+  box-shadow: 2px 2px 0 rgb(var(--gray-900) / 0.35);
+}
+input[type="range"].lab-range::-moz-range-thumb {
+  width: 8px;
+  height: 16px;
+  border: 2px solid rgb(var(--gray-900));
+  border-radius: 2px;
+  background: rgb(var(--surface));
+}
+input[type="range"].lab-range:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 3px;
+}
+
+/* the three signals, wherever they are drawn */
+.lab-sig-tfidf { background: rgb(var(--gray-900)); }
+.lab-sig-sbert { background: rgb(var(--accent)); }
+.lab-sig-metadata {
+  background:
+    repeating-linear-gradient(45deg, rgb(var(--gray-900) / 0.55) 0 2px, transparent 2px 5px),
+    rgb(var(--gray-300));
+}
+
+/* ============================================================
+   FORM CONTROLS AND POP-UPS — one theme everywhere
+   Checkboxes, radios, sliders and progress bars take the accent; the
+   text cursor, selection and file buttons follow the theme; dropdowns
+   (the closed control and, where the browser supports customizable
+   selects, the opened list) are drawn from the same tokens in every
+   mode and skin. Specificity is kept low so a component's own classes
+   still win where they set something on purpose.
+   ============================================================ */
+:where(input[type="checkbox"], input[type="radio"], input[type="range"], progress) {
+  accent-color: rgb(var(--accent));
+}
+:where(input, textarea) {
+  caret-color: rgb(var(--accent));
+}
+::selection {
+  background: rgb(var(--accent) / 0.35);
+  color: inherit;
+}
+input::file-selector-button {
+  margin-right: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  border: 2px solid rgb(var(--gray-900));
+  border-radius: 0.25rem;
+  background: rgb(var(--surface));
+  color: rgb(var(--ink));
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+input::file-selector-button:hover {
+  background: rgb(var(--accent-soft));
+}
+
+/* options: readable on the theme's surface even where the list is native */
+option,
+optgroup {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--ink));
+}
+
+@supports not (appearance: base-select) {
+  /* a themed arrow on the closed control (the opened list is the browser's) */
+  html select:not([multiple]):not([size]) {
+    appearance: none;
+    padding-right: 1.9rem;
+    background-image:
+      linear-gradient(45deg, transparent 50%, rgb(var(--ink)) 50%),
+      linear-gradient(135deg, rgb(var(--ink)) 50%, transparent 50%);
+    background-position:
+      calc(100% - 14px) 52%,
+      calc(100% - 9px) 52%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+}
+
+@supports (appearance: base-select) {
+  html select:not([multiple]):not([size]),
+  html select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+  }
+  html select:not([multiple]):not([size])::picker-icon {
+    color: rgb(var(--ink));
+    font-size: 0.8em;
+  }
+  html select:not([multiple]):not([size])::picker(select) {
+    box-sizing: border-box;
+    margin-top: 4px;
+    padding: 4px;
+    border: 3px solid rgb(var(--gray-900));
+    border-radius: 4px;
+    background: rgb(var(--surface));
+    color: rgb(var(--ink));
+    box-shadow: 4px 4px 0 rgb(var(--gray-900) / 0.25);
+  }
+  html select:not([multiple]):not([size]) option {
+    padding: 6px 10px;
+    border-radius: 2px;
+    background: transparent;
+    color: rgb(var(--ink));
+    font: inherit;
+  }
+  html select:not([multiple]):not([size]) option:hover,
+  html select:not([multiple]):not([size]) option:focus-visible {
+    background: rgb(var(--accent-soft));
+  }
+  html select:not([multiple]):not([size]) option:checked {
+    background: rgb(var(--accent));
+    color: rgb(var(--on-accent));
+  }
+  html select:not([multiple]):not([size]) option::checkmark {
+    display: none;
+  }
 }

@@ -10,7 +10,8 @@
    Elder Tree — gate the trivia tiers: a taller tree may be asked
    deeper questions.
 
-   The user also picks the species — Oak, Birch, Elm, or Redwood —
+   The user also picks the species — Oak, Birch, Elm, Redwood, the
+   Beanstalk, or the Rose Supervine —
    which is purely cosmetic; growth and trivia are species-blind.
 
    LORE hands out the next unseen trivia at the current stage;
@@ -43,7 +44,9 @@ export type TreeSpeciesId =
   | "oak"
   | "birch"
   | "elm"
-  | "redwood";
+  | "redwood"
+  | "beanstalk"
+  | "rosevine";
 
 export interface TreeSpecies {
   id: TreeSpeciesId;
@@ -98,6 +101,24 @@ export const TREE_SPECIES: TreeSpecies[] = [
     leafLight: "#48c96e",
     leaf: "#2f9e44",
     leafDeep: "#155e2b",
+  },
+  {
+    /* Jack's beanstalk: a twisting green giant that climbs past the clouds. */
+    id: "beanstalk",
+    label: "Beanstalk",
+    trunk: "#5f9a2e",
+    leafLight: "#b6f06a",
+    leaf: "#5cc23a",
+    leafDeep: "#25762a",
+  },
+  {
+    /* A thorn-armed rambling rose grown to tree size: crimson and pink blooms. */
+    id: "rosevine",
+    label: "Rose Vine",
+    trunk: "#4a2a3a",
+    leafLight: "#ff8fb4",
+    leaf: "#d81f5b",
+    leafDeep: "#7a0f33",
   },
 ];
 
@@ -204,6 +225,8 @@ export const TREE_SKIN_PRICES: Record<TreeSpeciesId, number> = {
   birch: 25,
   elm: 40,
   redwood: 60,
+  beanstalk: 80,
+  rosevine: 100,
 };
 
 /** Total fertilizer packets that grow the tree to the ancient
@@ -220,6 +243,8 @@ export const SPECIES_STAGE_FERT: Record<TreeSpeciesId, number[]> = {
   birch: [0, 480, 1000, 1580, 2100, 2600, TREE_GROWTH_TARGET],
   elm: [0, 500, 1050, 1600, 2150, 2650, TREE_GROWTH_TARGET],
   redwood: [0, 380, 850, 1350, 1900, 2450, TREE_GROWTH_TARGET],
+  beanstalk: [0, 360, 820, 1300, 1850, 2400, TREE_GROWTH_TARGET],
+  rosevine: [0, 440, 940, 1480, 2040, 2580, TREE_GROWTH_TARGET],
 };
 
 /* The ACTUAL painted height of each stage's tree — the drawn
@@ -233,6 +258,8 @@ export const SPECIES_STAGE_FT: Record<TreeSpeciesId, number[]> = {
   birch: [31, 276, 693, 953, 1000, 1000, 1000],
   elm: [31, 291, 669, 953, 1000, 1000, 1000],
   redwood: [24, 228, 661, 961, 953, 1000, 1000],
+  beanstalk: [24, 228, 661, 961, 953, 1000, 1000],
+  rosevine: [31, 268, 740, 953, 1000, 1000, 1000],
 };
 
 /** Height in feet for a species at its fertilizer position — a
@@ -308,6 +335,28 @@ export const SPECIES_INFO: Record<
     research:
       "Boughs almost a kilometer up, ringed like time itself. Its " +
       "bark, thick and fibrous, shrugs off fire and beetle alike.",
+  },
+  beanstalk: {
+    name: "Giant Beanstalk",
+    fact:
+      "Phaseolus vulgaris, written large — Jack's beanstalk, which " +
+      "grew overnight from a handful of magic beans and carried a " +
+      "boy above the clouds.",
+    research:
+      "Real climbing beans twine counterclockwise around whatever " +
+      "they find, and a runner bean can gain inches a day. The " +
+      "story just never told the vine to stop.",
+  },
+  rosevine: {
+    name: "Rose Supervine",
+    fact:
+      "Rosa multiflora grown tree-sized — a rambling rose armed " +
+      "with thorns and crowded with crimson and pink blooms, in the " +
+      "spirit of the thorn-magic knights of Black Clover.",
+    research:
+      "Ramblers climb by hooking their prickles into anything near, " +
+      "and one can cover a whole tree in a season or two. Each " +
+      "prickle is an outgrowth of the skin, not of the wood.",
   },
 };
 
@@ -410,6 +459,28 @@ export const SPECIES_IDLE_LINES: Record<
     { text: "The oldest of my kind have stood for more than two thousand years.", topic: "Redwood lore" },
     { text: "A slime once slept in my roots, and it never quite left.", topic: "Grove lore" },
   ],
+  beanstalk: [
+    { text: "Real climbing beans twine counterclockwise, whichever side of the world they grow on.", topic: "Beanstalk lore" },
+    { text: "A runner bean can gain several inches in a day. Jack's was only a little quicker.", topic: "Beanstalk lore" },
+    { text: "Bacteria in my root nodules turn air into fertilizer, and the next crop in the bed is glad of it.", topic: "Beanstalk lore" },
+    { text: "My tendrils feel for a support and begin to coil within minutes of touching one.", topic: "Beanstalk lore" },
+    { text: "I fold my leaves down at night, a sleep movement plants have been making for ages.", topic: "Beanstalk lore" },
+    { text: "Beans are among the oldest crops; people have grown them for thousands of years.", topic: "Beanstalk lore" },
+    { text: "Dried beans keep for years in a jar, which is why travelers carried them.", topic: "Beanstalk lore" },
+    { text: "Jack's tale was in print in English by 1807, and it was old even then.", topic: "Beanstalk lore" },
+    { text: "A slime once slept in my roots, and it never quite left.", topic: "Grove lore" },
+  ],
+  rosevine: [
+    { text: "Rambling roses climb by hooking prickles into whatever stands nearby. Botanists say prickles, not thorns.", topic: "Rose lore" },
+    { text: "One rambler can cover a whole tree in a season or two.", topic: "Rose lore" },
+    { text: "Rose hips are rich in vitamin C; British children gathered them for syrup in the Second World War.", topic: "Rose lore" },
+    { text: "Wild roses have five petals. The hundred-petal kind is the gardener's doing.", topic: "Rose lore" },
+    { text: "Fossil roses about thirty-five million years old have turned up in Colorado.", topic: "Rose lore" },
+    { text: "Each prickle is an outgrowth of my skin, not my wood; snap one and it comes away clean.", topic: "Rose lore" },
+    { text: "Cut me back hard and I bloom harder. Roses reward a firm hand.", topic: "Rose lore" },
+    { text: "People have grown roses for thousands of years, for scent first and beauty second.", topic: "Rose lore" },
+    { text: "A slime once slept in my roots, and it never quite left.", topic: "Grove lore" },
+  ],
 };
 
 /* ---------- per-species cheats and growth progress ---------- */
@@ -471,6 +542,20 @@ export const CHEAT_SETS: Record<
     { word: "mist", effect: "Coastal fog drifts low through the grove, thickest at the ground." },
     { word: "grove", effect: "A ring of young redwood sprouts stands around the elder, family circle." },
   ],
+  beanstalk: [
+    { word: "pods", effect: "Long green bean pods hang from the stalk and sway, plump with magic beans." },
+    { word: "beans", effect: "A few magic beans lie at the foot, each sprouting a curling shoot." },
+    { word: "hen", effect: "The giant's hen potters about the roots and now and then lays a golden egg." },
+    { word: "gleam", effect: "A golden light pours down from the clouds above, with sparks drifting in it." },
+    { word: "harp", effect: "A golden harp stands beside the stalk, playing by itself, notes floating away." },
+  ],
+  rosevine: [
+    { word: "petals", effect: "Rose petals drift down from the crown in pink and crimson, spinning as they fall." },
+    { word: "brambles", effect: "A tangle of thorned vines and blooms creeps over the ground around the trunk." },
+    { word: "butterfly", effect: "A butterfly flits from bloom to bloom and rests on the thorned trunk." },
+    { word: "blush", effect: "A rose-colored glow warms the garden, with pink motes drifting up through it." },
+    { word: "rapier", effect: "A silver rapier stands in the ground, wound with rose vine and glowing faintly." },
+  ],
 };
 
 /** Dedicated lines for each stage cleared (index 0 is the seed —
@@ -521,6 +606,24 @@ export const SPECIES_STAGE_LINES: Record<TreeSpeciesId, string[]> = {
     "Mature redwood. My roots meet the fog line.",
     "Giant. The tallest thing the coast has seen.",
     "Ancient redwood. The world tree crowns the sky.",
+  ],
+  beanstalk: [
+    "",
+    "A Seedling beanstalk. One bean, one green curl, already twisting.",
+    "Sapling beanstalk. I wind around myself to stand.",
+    "Young beanstalk. The first big leaves unfold along the vine.",
+    "Mature beanstalk. My coils thicken and the pods hang heavy.",
+    "Giant. The top has gone into the clouds and the ground is far away.",
+    "Ancient beanstalk. There is a castle up here somewhere.",
+  ],
+  rosevine: [
+    "",
+    "A Seedling rose. One cane, a few small thorns.",
+    "Sapling rose. The canes arch and the first buds show.",
+    "Young supervine. The thorns lengthen and the blooms open.",
+    "Mature supervine. Crimson and pink, all the way up.",
+    "Giant. My canes crown the sky, and every one is armed.",
+    "Ancient supervine. A whole tree in bloom, and no one gets near.",
   ],
 };
 
@@ -622,6 +725,24 @@ export const SPECIES_GROWTH_MARKERS: Record<
     { label: "Mature redwood", fert: 1900 },
     { label: "Giant", fert: 2450 },
     { label: "Ancient redwood", fert: TREE_GROWTH_TARGET },
+  ],
+  beanstalk: [
+    { label: "Seed", fert: 0 },
+    { label: "Seedling", fert: 360 },
+    { label: "Sapling", fert: 820 },
+    { label: "Young beanstalk", fert: 1300 },
+    { label: "Mature beanstalk", fert: 1850 },
+    { label: "Giant", fert: 2400 },
+    { label: "Ancient beanstalk", fert: TREE_GROWTH_TARGET },
+  ],
+  rosevine: [
+    { label: "Seed", fert: 0 },
+    { label: "Seedling", fert: 440 },
+    { label: "Sapling", fert: 940 },
+    { label: "Young supervine", fert: 1480 },
+    { label: "Mature supervine", fert: 2040 },
+    { label: "Giant", fert: 2580 },
+    { label: "Ancient supervine", fert: TREE_GROWTH_TARGET },
   ],
 };
 

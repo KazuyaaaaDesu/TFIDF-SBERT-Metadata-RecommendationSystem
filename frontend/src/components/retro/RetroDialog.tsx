@@ -59,6 +59,7 @@ export default function RetroDialog({
   autoCloseMs = 0,
   skin,
   woodBody = false,
+  elevated = false,
 }: {
   open: boolean;
   title: string;
@@ -85,6 +86,8 @@ export default function RetroDialog({
   skin?: "wood";
   /** With the wood skin, make the body wood too (the almanac's pages). */
   woodBody?: boolean;
+  /** Stack above other large pop-ups (e.g. the inspector pop-up). */
+  elevated?: boolean;
 }) {
   const wood = skin === "wood";
   const [box, setBox] = useState<Rect | null>(null);
@@ -247,7 +250,7 @@ export default function RetroDialog({
       aria-modal="true"
       aria-label={title}
       tabIndex={-1}
-      className="pointer-events-none z-[70] grid place-items-center bg-black/45 p-4 outline-none"
+      className={`pointer-events-none ${elevated ? "z-[9300]" : "z-[70]"} grid place-items-center bg-black/45 p-4 outline-none`}
       style={{
         position: "fixed",
         left: box.left,
@@ -260,14 +263,14 @@ export default function RetroDialog({
         ref={cardRef}
         className={`pointer-events-auto animate-pop-in overflow-hidden rounded-xl shadow-[6px_6px_0_rgba(0,0,0,0.3)] ${
           wood
-            ? "wood-board border-[3px] border-[#2a190b]"
+            ? "wood-board border-[3px] border-[color:var(--gm-edge)]"
             : "border-[3px] border-gray-900 bg-white"
         } ${size === "lg" ? "flex flex-col" : ""} ${cardWidth}`}
       >
         <div
           className={`flex shrink-0 items-center justify-between gap-3 border-b-[3px] px-4 py-2.5 ${
             wood
-              ? "wood-plaque wood-rope-top rounded-none border-x-0 border-t-0 border-b-[#20120a] pt-3.5"
+              ? "wood-plaque wood-rope-top rounded-none border-x-0 border-t-0 border-b-[color:var(--gm-edge2)] pt-3.5"
               : "border-gray-900 bg-accent"
           }`}
         >
@@ -285,7 +288,7 @@ export default function RetroDialog({
               aria-label="Close"
               className={`grid h-5 w-5 place-items-center rounded border-[2px] font-mono text-[11px] font-bold leading-none transition-colors pixel-ease ${
                 wood
-                  ? "wood-chip border-[#2a190b]"
+                  ? "wood-chip border-[color:var(--gm-edge)]"
                   : "border-onAccent/80 text-onAccent hover:bg-onAccent/15"
               }`}
             >
@@ -296,7 +299,7 @@ export default function RetroDialog({
 
         <div
           className={`text-xs leading-5 ${
-            wood && !woodBody ? "border-y-[3px] border-[#20120a] bg-white text-ink" : wood ? "" : "text-ink"
+            wood && !woodBody ? "border-y-[3px] border-[color:var(--gm-edge2)] bg-white text-ink" : wood ? "" : "text-ink"
           } ${size === "lg" ? "min-h-0 flex-1 overflow-y-auto p-4" : "p-4"}`}
         >
           {children}
@@ -305,7 +308,7 @@ export default function RetroDialog({
         <div
           className={`flex shrink-0 justify-end gap-2 px-4 py-3 ${
             wood
-              ? "wood-plaque rounded-none border-x-0 border-b-0 border-t-[#20120a]"
+              ? "wood-plaque rounded-none border-x-0 border-b-0 border-t-[color:var(--gm-edge2)]"
               : "border-t-[3px] border-gray-900 bg-canvas"
           }`}
         >
@@ -315,7 +318,7 @@ export default function RetroDialog({
               onClick={onCancel}
               className={`rounded-lg border-[3px] px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider transition-colors pixel-ease ${
                 wood
-                  ? "wood-chip border-[#2a190b]"
+                  ? "wood-chip border-[color:var(--gm-edge)]"
                   : "border-[2px] border-gray-900 bg-white text-ink hover:bg-accentSoft"
               }`}
             >

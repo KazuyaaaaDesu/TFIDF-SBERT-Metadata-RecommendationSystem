@@ -26,6 +26,7 @@ import {
   type SiteFeatureState,
 } from "../data/siteFeatures";
 import { enterPresentation, leavePresentation } from "../utils/presentation";
+import { useSun } from "./sun";
 
 export type SiteMode = "library" | "researcher" | "presentation";
 
@@ -154,9 +155,17 @@ export function SiteModeProvider({
     [mode, refreshFeatures]
   );
 
+  // Pro (the demo purchase) opens the Lab, as a beta, in the two shipped
+  // modes. Researcher mode already has everything.
+  const { proPurchased } = useSun();
+
   const value = useMemo<SiteModeValue>(() => {
     function stateFor(key: string): SiteFeatureState {
       if (mode === "researcher") {
+        return "shown";
+      }
+
+      if (key === "lab" && proPurchased) {
         return "shown";
       }
 
@@ -174,7 +183,7 @@ export function SiteModeProvider({
       canAccess: (key: string) => stateFor(key) === "shown",
       refreshFeatures,
     };
-  }, [mode, setMode, features, refreshFeatures]);
+  }, [mode, setMode, features, refreshFeatures, proPurchased]);
 
   return (
     <SiteModeContext.Provider value={value}>

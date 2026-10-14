@@ -14,11 +14,11 @@
 
 import {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 
 import {
   getEnrichmentStatus,
@@ -31,6 +31,7 @@ import {
   type Paper,
 } from "../api";
 import { CloseX } from "./retro/PixelIcons";
+import { usePlacedMenu } from "./ContextMenu";
 import {
   citationParts,
 } from "../utils/citationStyles";
@@ -75,8 +76,9 @@ export default function LiteratureMenu({
   onOpenFile: (paper: Paper) => void;
   onChanged: (message: string) => void;
 }) {
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const [position, setPosition] = useState({ left: x, top: y });
+  // Placed (and re-placed on resize or content change) so it stays on screen;
+  // the menu is drawn at 75% scale.
+  const { ref: menuRef, style: placed } = usePlacedMenu(x, y, 0.75);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [busy, setBusy] = useState(false);
 
@@ -89,29 +91,6 @@ export default function LiteratureMenu({
     (paper) => (paper.stored_path ?? "").trim().length > 0
   );
   const filePaper = filePapers[0] ?? null;
-
-  // Clamp inside the viewport once the menu has a measured size.
-  useLayoutEffect(() => {
-    const element = menuRef.current;
-
-    if (!element) {
-      return;
-    }
-
-    const rect = element.getBoundingClientRect();
-    const margin = 8;
-
-    setPosition({
-      left: Math.max(
-        margin,
-        Math.min(x, window.innerWidth - rect.width - margin)
-      ),
-      top: Math.max(
-        margin,
-        Math.min(y, window.innerHeight - rect.height - margin)
-      ),
-    });
-  }, [x, y]);
 
   // Dismiss on outside click / touch / Escape. While a dialog
   // (rename, merge) is open it owns the screen: the menu handlers
@@ -348,15 +327,14 @@ export default function LiteratureMenu({
   // Render
   // ----------------------------------------------------------
 
-  return (
+  return createPortal(
     <>
       <div
         ref={menuRef}
         role="menu"
         data-literature-menu
         style={{
-          left: position.left,
-          top: position.top,
+          ...placed,
           transform: "scale(0.75)",
           transformOrigin: "top left",
         }}
@@ -527,7 +505,8 @@ export default function LiteratureMenu({
           }}
         />
       )}
-    </>
+    </>,
+    document.body,
   );
 }
 

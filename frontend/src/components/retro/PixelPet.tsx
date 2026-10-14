@@ -1451,6 +1451,8 @@ export default function PixelPet() {
     <div
       className="fixed z-[9980]"
       style={{ right: petPos.right, bottom: petPos.bottom }}
+      data-drop-zone="pet"
+      data-drop-label="Remove from library"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

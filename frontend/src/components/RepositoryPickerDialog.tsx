@@ -10,6 +10,8 @@
  */
 
 import { useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import ResponsiveLabel from "./ResponsiveLabel";
 
 import { listPapers, type Paper } from "../api";
 import MathText from "../components/MathText";
@@ -178,24 +180,28 @@ export default function RepositoryPickerDialog({
           <div className="flex items-center gap-2">
             <Button
               type="button"
+              aria-label="Previous page"
+              title="Previous page"
               variant="secondary"
               disabled={page <= 1}
               onClick={() => setPage((value) => Math.max(1, value - 1))}
             >
-              ‹ Prev
+              <ResponsiveLabel icon={ChevronLeft}>Prev</ResponsiveLabel>
             </Button>
             <span className="font-mono text-xs text-muted">
               {page} / {pageCount}
             </span>
             <Button
               type="button"
+              aria-label="Next page"
+              title="Next page"
               variant="secondary"
               disabled={page >= pageCount}
               onClick={() =>
                 setPage((value) => Math.min(pageCount, value + 1))
               }
             >
-              Next ›
+              <ResponsiveLabel icon={ChevronRight}>Next</ResponsiveLabel>
             </Button>
           </div>
         </div>

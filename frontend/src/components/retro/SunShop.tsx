@@ -45,6 +45,7 @@ import { useHunt } from "../../state/hunt";
 import { useAchievements } from "../../state/achievements";
 import { addOwnedSkin, useOwnedSkins } from "../../state/skins";
 import DevPanel from "../DevPanel";
+import { useSiteMode } from "../../state/siteMode";
 import KnowledgeTree from "./KnowledgeTree";
 import { CardBadge, CardButton, CardTag, ShopCard } from "./ShopCard";
 import SpeciesPreview from "./SpeciesPreview";
@@ -53,11 +54,13 @@ import SunGlyph from "./SunGlyph";
 import TokenGlyph from "./TokenGlyph";
 import RetroDialog from "./RetroDialog";
 import ThemeShop from "./ThemeShop";
+import ProPackButton from "../ProPack";
+import { PRO_PACK_PRICE_LABEL, PRO_PACK_QUEST_NOTE } from "../../utils/proPack";
 import { DEFAULT_BACKDROP_THEME, type BackdropThemeId } from "../../data/backdrops";
 
 export type ShopTabId = "shop" | "skins" | "themes" | "earn" | "wallet";
 
-const RAIL_TABS: {
+const ALL_RAIL_TABS: {
   id: ShopTabId;
   label: string;
   glyph: JSX.Element;
@@ -78,6 +81,8 @@ const TREE_SPECIES_CARDS: {
   { id: "birch", label: "Birch" },
   { id: "elm", label: "Elm" },
   { id: "redwood", label: "Redwood" },
+  { id: "beanstalk", label: "Beanstalk" },
+  { id: "rosevine", label: "Rose supervine" },
 ];
 
 const SPECIES_KEY = "paperrec_knowledge_species";
@@ -85,7 +90,7 @@ const SPECIES_KEY = "paperrec_knowledge_species";
 function readSpecies(): TreeSpeciesId {
   try {
     const raw = window.localStorage.getItem(SPECIES_KEY);
-    if (raw && ["crimson", "oak", "birch", "elm", "redwood"].includes(raw)) {
+    if (raw && TREE_SPECIES_CARDS.some((entry) => entry.id === raw)) {
       return raw as TreeSpeciesId;
     }
   } catch {
@@ -186,6 +191,14 @@ export default function SunShop({
   plantedSpecies?: TreeSpeciesId;
   onPlantSpecies?: (id: TreeSpeciesId) => void;
 }) {
+  // The Developer tab (test wallet, Pro override, looks) is for Researcher
+  // mode only; the shipped tree has the shops and the earn guide.
+  const { mode: siteMode } = useSiteMode();
+  const RAIL_TABS =
+    siteMode === "researcher"
+      ? ALL_RAIL_TABS
+      : ALL_RAIL_TABS.filter((entry) => entry.id !== "wallet");
+
   const {
     balance,
     fertilizer,
@@ -197,6 +210,7 @@ export default function SunShop({
     tokens,
     spendTokens,
     testTopUp,
+    testZeroWallet,
     proOverride,
     setProOverride,
   } = useSun();
@@ -569,6 +583,17 @@ export default function SunShop({
             })}
           </div>
 
+          <div className="mt-3">
+            <ShopCard
+              layout="side"
+              preview={<Sparkles className="h-8 w-8" aria-hidden="true" />}
+              title={`Pro Pack \u2013 ${PRO_PACK_PRICE_LABEL}`}
+              blurb={`Demo checkout, nothing is charged. Unlocks My Library PRO plus 1,000 fertilizer, 1,000 tree tokens and 1 seed pack. ${PRO_PACK_QUEST_NOTE}`}
+            >
+              <ProPackButton variant="button" />
+            </ShopCard>
+          </div>
+
           <p className="mt-2 text-right font-mono text-[9px] font-bold uppercase tracking-wider text-muted">
             purchases land in your hold — drag the garden's fertilizer
             counter onto the tree
@@ -689,8 +714,9 @@ export default function SunShop({
           </p>
           <p className="mt-1 text-xs leading-5 text-ink">
             Dev only: top up instantly to stress the shop and the Tree
-            of Knowledge, or force My Library PRO on without growing
-            a tree. Remove before launch.
+            of Knowledge, zero the wallet back to a clean balance, or
+            force My Library PRO on without growing a tree. Remove
+            before launch.
           </p>
           <div className="mt-3 flex flex-col gap-2">
             <button
@@ -719,6 +745,27 @@ export default function SunShop({
               <SunGlyph className="h-3 w-3" />
               <TokenGlyph className="h-3 w-3" />
             </span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setConfirm({
+                  title: "Zero the wallet",
+                  body:
+                    `Set sun and growth tokens back to 0? You now hold ` +
+                    `${balance} sun and ${tokens} growth tokens. The trees, ` +
+                    `the fertilizer in hand, the skins and the achievements ` +
+                    `all stay — only the balances are cleared.`,
+                  onYes: testZeroWallet,
+                })
+              }
+              className="flex w-full items-center justify-between rounded border-[3px] border-[#b45309] bg-white px-3 py-1.5 font-mono text-[11px] font-bold text-ink transition-colors pixel-ease hover:bg-accentSoft"
+            >
+              <span>zero both</span>
+              <span className="flex items-center gap-1">
+                <SunGlyph className="h-3 w-3" />
+                <TokenGlyph className="h-3 w-3" />
+              </span>
             </button>
             <button
               type="button"

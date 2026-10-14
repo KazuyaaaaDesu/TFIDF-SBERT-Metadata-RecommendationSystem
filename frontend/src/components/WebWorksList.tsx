@@ -1,18 +1,28 @@
 /**
  * WEB WORKS LIST — the Prior works / Derivative works tabs for the
- * WEB scope: the OpenAlex references (prior) and citers
- * (derivative) of the center paper.
+ * WEB scope: the references (prior) and citers (derivative) of the
+ * center paper, unioned across OpenAlex, Semantic Scholar and Crossref.
  */
 
-import type { WebWork } from "../api";
+import type { WebConnections, WebWork } from "../api";
 import { downloadWebWorksCsv } from "../utils/worksCsv";
+import {
+  answeredSources,
+  provenanceLabel,
+  sourceLabel,
+  unavailableNote,
+  workUrl,
+} from "../utils/webWorkSources";
 
 interface WebWorksListProps {
   side: "prior" | "derivative";
   works: WebWork[];
   activeKey: string | null;
   onActiveKey: (key: string | null) => void;
-  onShowInGraph: () => void;
+  /** Omit where there is no graph to jump to. */
+  onShowInGraph?: () => void;
+  /** The payload these works came from, for the provenance caption. */
+  connections?: Pick<WebConnections, "sources" | "sources_skipped"> | null;
   widened?: boolean;
 }
 
@@ -35,16 +45,38 @@ export default function WebWorksList({
   activeKey,
   onActiveKey,
   onShowInGraph,
+  connections,
   widened = false,
 }: WebWorksListProps) {
   const title = side === "prior" ? "Prior works" : "Derivative works";
+  const providers = answeredSources(connections);
+  const note = unavailableNote(connections);
 
   return (
     <div className="p-4" data-web-works={side}>
       <div className="flex items-start justify-between gap-3">
-        <p className="max-w-3xl text-sm leading-6 text-muted">
-          {DESCRIPTIONS[side]}
-        </p>
+        <div className="min-w-0">
+          <p className="max-w-3xl text-sm leading-6 text-muted">
+            {onShowInGraph
+              ? DESCRIPTIONS[side]
+              : DESCRIPTIONS[side].replace(
+                  " Selecting one highlights its node in the graph.",
+                  ""
+                )}
+          </p>
+
+          {/* Provenance: the list is a union, so say who answered
+              rather than implying one graph produced it all. */}
+          <p className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-muted">
+            {providers}
+          </p>
+
+          {/* A provider that was down is worth saying: the list is
+              shorter than the user would otherwise expect. */}
+          {note && (
+            <p className="mt-1 text-xs text-muted">{note}</p>
+          )}
+        </div>
 
         {works.length > 0 && (
           <button
@@ -59,7 +91,7 @@ export default function WebWorksList({
 
       {works.length === 0 ? (
         <p className="mt-4 rounded border-[3px] border-dashed border-gray-900 bg-canvas px-4 py-6 text-center text-sm text-muted">
-          OpenAlex returned no {side === "prior" ? "references" : "citers"}
+          {providers} returned no {side === "prior" ? "references" : "citers"}
           {" "}for this work.
         </p>
       ) : (
@@ -121,6 +153,27 @@ export default function WebWorksList({
                         ? ` · ${work.cited_by_count} citations`
                         : ""}
                     </span>
+
+                    {/* A row only earns a chip when it is not simply
+                        OpenAlex's: either a second graph corroborated
+                        it, or it came from one graph alone. */}
+                    {(() => {
+                      const provenance = provenanceLabel(work);
+
+                      if (!provenance) return null;
+
+                      return (
+                        <span
+                          className={`mt-1 inline-block rounded border-[2px] px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.12em] ${
+                            isActive
+                              ? "border-onAccent text-onAccent"
+                              : "border-gray-900 bg-canvas text-muted"
+                          }`}
+                        >
+                          {provenance}
+                        </span>
+                      );
+                    })()}
                   </span>
                 </button>
 
@@ -138,18 +191,30 @@ export default function WebWorksList({
                     </a>
                   )}
 
-                  <a
-                    href={`https://openalex.org/${work.work_id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`text-xs underline ${
-                      isActive ? "text-onAccent" : "text-accent"
-                    }`}
-                  >
-                    OpenAlex
-                  </a>
+                  {/* One honest link per row: the old hardcoded
+                      openalex.org link 404'd for every row the other
+                      providers contributed. */}
+                  {!work.doi &&
+                    (() => {
+                      const url = workUrl(work);
 
-                  <button
+                      if (!url) return null;
+
+                      return (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`text-xs underline ${
+                            isActive ? "text-onAccent" : "text-accent"
+                          }`}
+                        >
+                          {sourceLabel(work.sources?.[0] ?? "openalex")}
+                        </a>
+                      );
+                    })()}
+
+                  {onShowInGraph && (<button
                     type="button"
                     onClick={onShowInGraph}
                     className={`ml-auto font-mono text-[10px] font-bold uppercase tracking-[0.12em] underline ${
@@ -157,7 +222,7 @@ export default function WebWorksList({
                     }`}
                   >
                     Show in graph
-                  </button>
+                  </button>)}
                 </div>
               </li>
             );

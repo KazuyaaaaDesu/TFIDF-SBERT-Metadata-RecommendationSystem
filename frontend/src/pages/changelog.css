@@ -1,0 +1,40 @@
+.chg-page { max-width: 760px; }
+.chg-spine { list-style: none; margin: 0; padding: 0; position: relative; }
+.chg-spine::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 1.5rem; width: 3px; margin-left: -1.5px;
+  background: rgb(var(--gray-900) / .35);
+}
+.chg-item { position: relative; padding-bottom: .9rem; }
+.chg-row { position: relative; padding-left: 3.5rem; }
+.chg-date {
+  font-family: ui-monospace, monospace; font-size: .7rem; font-weight: 700; color: rgb(var(--muted));
+  margin: 0 0 .25rem; line-height: 1.75rem;
+}
+.chg-node {
+  position: absolute; left: 0; top: 1.75rem; width: 3rem; margin-top: -.0rem;
+  text-align: center; padding: .15rem 0; font-family: ui-monospace, monospace; font-size: .65rem; font-weight: 800;
+  background: rgb(var(--surface)); color: rgb(var(--ink));
+  border: 3px solid rgb(var(--gray-900)); border-radius: 999px; z-index: 1;
+}
+.chg-row[data-open="true"] .chg-node { background: rgb(var(--gray-900)); color: rgb(var(--on-ink)); }
+.chg-row[data-latest="true"] .chg-node { background: rgb(var(--accent)); color: rgb(var(--on-accent)); box-shadow: 0 0 0 4px rgb(var(--accent-soft)); }
+.chg-card {
+  position: relative; background: rgb(var(--surface)); border: 2px solid rgb(var(--gray-900)); border-radius: 6px;
+  padding: .7rem .9rem;
+}
+.chg-row[data-latest="true"] .chg-card { border-width: 3px; }
+.chg-latest {
+  position: absolute; top: -.7rem; right: .75rem; padding: .05rem .5rem; font-size: .6rem; font-weight: 800;
+  letter-spacing: .15em; text-transform: uppercase; border-radius: 999px;
+  background: rgb(var(--accent)); color: rgb(var(--on-accent)); border: 2px solid rgb(var(--gray-900));
+}
+.chg-head { display: flex; width: 100%; align-items: center; gap: .5rem; text-align: left; flex-wrap: wrap; }
+.chg-title { flex: 1 1 12rem; min-width: 0; font-size: .875rem; font-weight: 700; color: rgb(var(--ink)); }
+.chg-chev { font-weight: 800; color: rgb(var(--muted)); transition: transform .15s; }
+.chg-row[data-open="true"] .chg-chev { transform: rotate(90deg); }
+@media (min-width: 640px) {
+  .chg-row { padding-left: 7rem; }
+  .chg-date { position: absolute; left: 0; top: .9rem; width: 2.7rem; text-align: right; margin: 0; line-height: 1.5rem; }
+  .chg-spine::before { left: 4.6rem; }
+  .chg-node { left: 3.1rem; top: .9rem; }
+}

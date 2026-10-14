@@ -1,0 +1,54 @@
+/* Receiving dock: ruled forms, stamped corners, a step rail, a manifest. */
+.upl-dock { padding-inline: 4px; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .upl-dock { padding-inline: 0; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 1.75rem; } }
+
+/* ---- step rail ---- */
+.upl-rail { list-style: none; margin: 0; padding: 0; display: flex; gap: 0; counter-reset: upl; }
+.upl-rail li { flex: 1 1 0; min-width: 0; position: relative; padding: 0.5rem 0.25rem 0.4rem; text-align: center;
+  border-top: 3px solid rgb(var(--gray-300)); font: 700 0.6875rem/1.2 ui-monospace, monospace; letter-spacing: .12em;
+  text-transform: uppercase; color: rgb(var(--muted)); }
+.upl-rail li small { display: block; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: .85; margin-top: 2px; }
+.upl-rail li[data-state="done"] { border-top-color: rgb(var(--ink)); color: rgb(var(--ink)); }
+.upl-rail li[data-state="now"] { border-top-color: rgb(var(--accent)); color: rgb(var(--ink)); background: rgb(var(--accent-soft)); }
+.upl-rail li small { display: none; }
+@media (min-width: 900px) {
+  .upl-railwrap { position: sticky; top: 1rem; align-self: start; }
+  .upl-rail { flex-direction: column; border-left: 2px solid rgb(var(--gray-300)); margin-left: 0.5rem; }
+  .upl-rail li { text-align: left; border-top: 0; padding: 0.7rem 0 0.7rem 1.1rem; }
+  .upl-rail li::before { content: ""; position: absolute; left: -0.5rem; top: 0.85rem; width: 0.85rem; height: 0.85rem;
+    background: rgb(var(--surface)); border: 2px solid rgb(var(--gray-400)); }
+  .upl-rail li[data-state="done"]::before { background: rgb(var(--ink)); border-color: rgb(var(--ink)); }
+  .upl-rail li[data-state="now"] { background: transparent; }
+  .upl-rail li[data-state="now"]::before { background: rgb(var(--accent)); border-color: rgb(var(--ink)); }
+  .upl-rail li small { display: block; }
+}
+
+/* ---- ruled form sheet with stamped corners ---- */
+.upl-sheet { position: relative; background: rgb(var(--surface)); border: 1px solid rgb(var(--gray-900)); padding: 1.1rem 1rem 1rem;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 1.74rem, rgb(var(--gray-200) / .55) 1.74rem 1.8rem); }
+.upl-sheet::before, .upl-sheet::after { content: ""; position: absolute; width: .7rem; height: .7rem; pointer-events: none;
+  border: 2px solid rgb(var(--ink)); }
+.upl-sheet::before { top: -4px; left: -4px; border-right: 0; border-bottom: 0; }
+.upl-sheet::after { bottom: -4px; right: -4px; border-left: 0; border-top: 0; }
+.upl-sheet--plain { background-image: none; }
+.upl-tab { display: inline-block; margin: -1.1rem 0 .7rem -1rem; padding: .2rem .6rem; background: rgb(var(--ink)); color: rgb(var(--surface));
+  font: 700 .6875rem/1.3 ui-monospace, monospace; letter-spacing: .16em; text-transform: uppercase; }
+.upl-drop { border: 2px dashed rgb(var(--gray-900)) !important; border-radius: 0 !important; background-color: rgb(var(--canvas)); }
+
+/* ---- manifest ---- */
+.upl-manifest { list-style: none; margin: .75rem 0 0; padding: 0; border-top: 2px solid rgb(var(--ink)); }
+.upl-row { display: grid; grid-template-columns: 2rem minmax(0,1fr) auto; align-items: center; gap: .6rem; width: 100%; text-align: left;
+  padding: .45rem .25rem; border-bottom: 1px solid rgb(var(--gray-400)); background: transparent; color: rgb(var(--ink)); cursor: pointer; }
+.upl-row:hover { background: rgb(var(--accent-soft)); }
+.upl-row[aria-current="true"] { background: rgb(var(--accent-soft)); box-shadow: inset 3px 0 0 rgb(var(--ink)); }
+.upl-row--static { cursor: default; }
+.upl-row--static:hover { background: transparent; }
+.upl-no { font: 700 .75rem ui-monospace, monospace; color: rgb(var(--muted)); text-align: center; }
+.upl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8125rem; font-weight: 600; }
+.upl-sub { display:block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .6875rem; color: rgb(var(--muted)); font-weight: 400; }
+.upl-stamp { display: inline-block; padding: .08rem .4rem; border: 2px solid rgb(var(--ink)); outline: 1px solid rgb(var(--ink)); outline-offset: 1px;
+  font: 800 .625rem/1.3 ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; color: rgb(var(--ink));
+  transform: rotate(-2deg); white-space: nowrap; background: rgb(var(--surface)); }
+.upl-stamp[data-tone="ok"] { background: rgb(var(--accent)); color: rgb(var(--on-accent)); }
+.upl-stamp[data-tone="warn"] { border-style: dashed; }
+.upl-stamp[data-tone="idle"] { color: rgb(var(--muted)); border-color: rgb(var(--gray-400)); outline-color: transparent; }

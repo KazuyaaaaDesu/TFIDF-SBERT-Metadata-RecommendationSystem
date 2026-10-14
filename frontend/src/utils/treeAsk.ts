@@ -78,6 +78,14 @@ const SPECIES_LINES: Record<string, string[]> = {
     "Fog takes hours to settle. Be like fog.",
     "I'm three hundred feet up and still within earshot. Hush.",
   ],
+  beanstalk: [
+    "Keep asking and I'll grow out of earshot.",
+    "I climbed past the clouds to get away from questions.",
+  ],
+  rosevine: [
+    "Careful. Everything about me has thorns.",
+    "Ask nicely, or ask the thorns.",
+  ],
 };
 
 /** A grumpy line in the tree's own voice: its species' or a shared one. */

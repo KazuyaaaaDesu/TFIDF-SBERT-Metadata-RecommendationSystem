@@ -85,7 +85,7 @@ class StyledAnswerTest(unittest.TestCase):
         self.assertIn("Semantic retrieval wins (Researcher, 2023).", response.answer)
         self.assertIn("\n\nReferences\n", response.answer)
         self.assertIn(
-            "Researcher, Ada (2023). A grounded retrieval study. "
+            "Researcher, A. (2023). A grounded retrieval study. "
             "https://doi.org/10.1234/grounded.2023",
             response.answer,
         )
@@ -102,7 +102,7 @@ class StyledAnswerTest(unittest.TestCase):
 
         self.assertTrue(response.used_fallback)
         self.assertIn("[1] Semantic retrieval outperforms lexical search.", response.answer)
-        self.assertIn("\n\nReferences\n[1] Researcher, Ada,", response.answer)
+        self.assertIn("\n\nReferences\n[1] A. Researcher,", response.answer)
 
         apa = ask("apa")
         self.assertIn("(Researcher, 2023) Semantic retrieval", apa.answer)

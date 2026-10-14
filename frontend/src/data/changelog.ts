@@ -23,6 +23,93 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "library-folders",
+    date: "Oct 10",
+    title: "Folders for My Library, and a right-click menu that stays on screen",
+    tag: "NEW",
+    body: "Organise saved papers into your own nested folders, like Zotero or Mendeley: create, rename, move and delete folders, drag papers onto them, or right-click a paper to file it. A paper can sit in several folders. Right-click menus now always open fully inside the window, flipping away from the edges.",
+    details: [
+      "Backend: tables library_folders and library_folder_papers; rules in app/services/library_folders.py (six levels deep, sibling names unique ignoring case, no folder inside itself, only saved papers can be filed, removing a paper from the library clears its placements); routes under /api/library/folders, registered before the /api/library/{paper_id} routes.",
+      "UI: components/LibraryFolderTree.tsx (sidebar, drag and drop, inline rename, delete confirmation) and state/libraryFolders.ts; tree and move rules in utils/folderTree.ts.",
+      "Menus: components/ContextMenu.tsx renders into <body> (the page's entry animation made position: fixed relative to <main>, so menus drifted) and places itself with utils/menuPosition.ts; LiteratureMenu uses the same placement.",
+    ],
+  },
+  {
+    id: "garden-charm-word-pairing",
+    date: "Oct 9",
+    title: "Feeding the tree announces the right charm word",
+    tag: "FIXED",
+    body: "A feeding that crossed one charm milestone used to announce the wrong word. Growing past 450 ft on its own unlocked the 250 ft word, so the garden told you to type the charm you already had. Every crossed height now brings the word at its own rung, and a stage that shares its painted height with the next one says so instead of promising 0 ft.",
+    details: [
+      "src/utils/gardenMilestones.ts: new pure cheatsCrossed(before, after, heights, set). The old code filtered CHEAT_HEIGHTS and then indexed the word set with the FILTERED index, so a rise from 300 to 460 ft (450 only) paired with the 250 ft word; each rung is now paired with its own index on the ladder. Covered by scripts/gardenMilestones.test.mjs alongside milestonesCrossed.",
+      "src/state/sun.tsx applyFertilizer: the wisdom line falls back to 'Same height as the next stage, only fuller.' when the species' stage table paints two stages at the same height (several species reach 1000 ft at Giant), instead of saying '0 ft to the next stage'. The header comment now matches the code: fertilizer goes to a hold, height follows the stage table, and there are five charm rungs at 250 / 450 / 650 / 850 / 1000 ft.",
+      "src/components/retro/TreeOfKnowledge.tsx: Get info no longer leaves the reader at the top of the old content. The card is anchored to the stage's bottom edge, so revealing the research grows it upward; the card's own body now scrolls to the revealed section and takes focus without scrolling the page (overflow-anchor is off so the browser does not fight it), and the card is capped to the stage so it cannot run off the top.",
+    ],
+  },
+  {
+    id: "web-result-similar",
+    date: "Oct 9",
+    title: "Similar papers for web results",
+    tag: "NEW",
+    body: "Selecting a web result now offers a Similar tab, in the inspector and its pop-up. In your library ranks your repository against the web paper's title and abstract with the active algorithm; On the web lists its OpenAlex prior and derivative works.",
+    details: [
+      "src/components/WebSimilarPanel.tsx: the library scope calls getRecommendations with a text query built from the title plus abstract (capped at 1,500 characters) and the current pipeline, custom weights and Top K (max 25); selecting a row opens that paper in the inspector. The web scope reuses WebWorksList. Both abort stale requests when the selection or settings change.",
+      "app/api.py GET /api/web/connections?doi=&title=&work_id=: resolves the work in OpenAlex by DOI, then work id, then a title search accepted only when the top hit's title matches, and returns the same prior/derivative lists as a saved paper. Unmatched results answer 200 with resolved:false and empty lists; only OpenAlex is contacted and the DOI goes through normalize_doi.",
+      "app/services/web_connections.py: fetch_neighborhood() holds the logic; fetch_web_neighborhood(paper) now delegates to it. test/test_web_result_connections.py covers it offline through the fetch seam.",
+    ],
+  },
+  {
+    id: "recommend-blend-web",
+    date: "Oct 9",
+    title: "Recommend can blend in live web results",
+    tag: "NEW",
+    body: "A new Blend in web results option in the Recommend scope also fetches live web hits for the same query and ranks them with the corpus in one list. Web rows carry a WEB tag and an Import button. It is off by default.",
+    details: [
+      "src/utils/blendRecommendations.ts: pure merge helper. Each list is rescaled by its own best score (both lists min-max normalise their signals inside their own candidate set, so raw scores are not directly comparable), then sorted together; ties go to the local paper. Web hits matching a local paper by DOI, or by normalised title plus year, are dropped (local wins). The result is cut to Top K.",
+      "src/pages/repository/Repository.tsx: the web half runs in parallel through getWebRecommendations with the same pipeline and weights; a seed run builds its query from the seed's title and first keywords. If the web half fails the local list still shows, with a Web results unavailable notice.",
+      "The choice is remembered per browser (paperrec_repo_blend_web). scripts/blendRecommendations.test.mjs covers the merge.",
+    ],
+  },
+  {
+    id: "doaj-web-source",
+    date: "Oct 9",
+    title: "DOAJ joins web search as an opt-in source",
+    tag: "NEW",
+    body: "Web search can now include DOAJ, the Directory of Open Access Journals. Every hit is a free-to-read article from a vetted open-access journal. It is off by default, so tick DOAJ under Sources to add it.",
+    details: [
+      "app/services/web_search.py: new _search_doaj() against doaj.org/api/search/articles/{query}, labelled doaj-search for the circuit breaker; SOURCES now includes doaj and _merge/_interleave dedupe it DOI-first.",
+      "Year filters become an Elasticsearch range (bibjson.year:[min TO max]) and are re-checked client side. DOAJ has no citation counts and sorting by year server-side times out upstream, so sort=year/citations is handled by the shared merge.",
+      "app/api.py: the sources allow-list on /api/recommendations/web, /web-compare and the web search endpoint accepts doaj.",
+    ],
+  },
+  {
+    id: "pro-pack-demo",
+    date: "Oct 9",
+    title: "A simulated Pro Pack: unlock Pro with a demo checkout",
+    tag: "NEW",
+    body: "A new Pro Pack ($4.99, one time) unlocks My Library's PRO tabs and adds 1,000 fertilizer, 1,000 tree tokens and one free seed pack. The checkout is a demo: nothing is charged and the purchase is only remembered in this browser. The secret quests, Pet and Garden, are not skipped by buying; they are still yours to finish.",
+    details: [
+      "State: state/sun.tsx persists proPurchased (older saves read as false) and purchasePro(), which credits the bundle once (idempotent, guarded by the flag and a ref); proUnlocked is now the dev override OR proPurchased OR the Young-stage condition, still off in Presentation mode.",
+      "Bundle: utils/proPack.ts holds the price constant, the benefits and the pure applyProPack / pickSeedPackSpecies helpers (tested in scripts/proPack.test.mjs). Fertilizer lands in the hold, tokens in the wallet, and the seed pack adds the first tree skin you do not own yet to the seed bank.",
+      "UI: components/ProPack.tsx is a RetroDialog (offer, short fake processing, receipt) behind a Buy Pro button on the PRO locked badge, each locked My Library tab and a Pro Pack card in the Sun Shop; after buying it reads PRO owned.",
+    ],
+  },
+  {
+    id: "garden-new-trees",
+    date: "Oct 8",
+    title: "Garden: a Beanstalk and a Rose Supervine, and creatures that follow the tree",
+    tag: "NEW",
+    body: "Two new trees to plant: Jack's Beanstalk, a slim swaying stalk that climbs into the clouds to the giant's castle, and the Rose Supervine, a thorny rose shrub grown into a vine, with the sleeper's castle behind its summit: grey brick, a rose window, an arched door ajar on her bed, and briars that climb the towers. The squirrel and the other trunk creatures now follow the tree as it grows and shrinks, and the squirrel faces the tree.",
+    details: [
+      "Species: beanstalk (80 tokens) and rosevine (100 tokens) join the five older trees in data/knowledge.ts (stage ferts, dossier, idle lines, stage lines, charms) and in the Sun Shop, the shop's skin cards, the tree card, the variants (Golden Harvest, Moonvine, Magic Bean; Blue Rose, White Rose, Golden Rose) and the grumpy lines.",
+      "Drawing: two new leaf designs in utils/leafShapes.ts (bean: a heart-shaped leaflet; rose: a scalloped bloom, with a second sprig design for the green leaves), bark styles twist (wound strands) and thorns (cream thorns pointing down), thorns on the limbs and the ascent branches, a stalk that sways a couple of pixels, banks of cloud up the beanstalk and the giant's cloud castle behind its summit (paler stone, a huge door, a golden harp in its window, tendrils and heart leaves), fireflies and winding sparks in place of sylphs on the climb, and the briar rose castle (utils/castleSprite.ts, after a 128 x 128 study) whose canes keep creeping up the towers.",
+      "Charms: beanstalk has pods, beans, hen (the tale's golden-egg layer), gleam and harp; rosevine has petals, brambles, butterfly, blush and rapier. The hen and the butterfly are clickable; so is the sleeper's door.",
+      "Creatures: gardenCharms.ts keeps per-creature memory (env.memo) and works out the stretch of bare trunk on screen each frame (bandOf), so the squirrel, woodpecker, slug, sap bucket, owl hollow, bark ribbons and the oriole's fallback nest climb up and down with the tree, the camera and the stage preview. The squirrel runs on the ground, climbs, sits and chatters, and faces the trunk.",
+      "Menu: the garden's species chips are now trading cards (rarity pips, an art window with the tree, a name banner, a footer) in a scrolling seed bank; the menu has a title row with the stage line and six frame themes (wood, slate stone, parchment, midnight, meadow, blossom) chosen from a Frame menu (so more can be added), the seed bank scrolls sideways and the Dev switch stands apart; the choice is remembered per browser and shared by the pop-up dialogs through CSS variables in index.css.",
+      "Birds: the three crown birds now perch on real leaves, scale with the crown and fly in and out as it fills or shrinks (they used to sit in the air above a young tree).",
+    ],
+  },
+  {
     id: "upload-fixes",
     date: "Oct 8",
     title: "Upload: RIS and EndNote save, nothing is filed by default, several papers at once",

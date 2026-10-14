@@ -116,6 +116,7 @@ kazuyaaaadesu-tfidf-sbert-metadata-recommendationsystem/
 │   ├── classify_existing_papers.py
 │   ├── init_script.py
 │   ├── inspect_papers.py
+│   ├── migrate_add_battle_research_log.py
 │   ├── migrate_add_stored_path.py
 │   ├── rebuild_recommendation.py
 │   ├── rebuild_recommendation_index.py
@@ -125,6 +126,7 @@ kazuyaaaadesu-tfidf-sbert-metadata-recommendationsystem/
 │
 ├── storage/
 │   ├── recommendation_index_status.json
+│   ├── exports/
 │   └── papers/
 │
 ├── test/
@@ -341,6 +343,19 @@ The migration is safe to run when the column already exists; the script checks f
 
 Do not run unrelated migrations unless the project actually requires them.
 
+### 7b. Run the battle-log migration if required
+
+If you are using an older database whose `battle_runs` table predates the
+research log, add the run's label, subject class, query kind, knobs, corpus
+fingerprint and stored comparison response:
+
+```powershell
+python -m scripts.migrate_add_battle_research_log
+```
+
+Existing rows are untouched; only `query_kind` is filled in, from
+`query IS NULL`. The script is safe to run more than once.
+
 ### 8. Prepare the storage directories
 
 The application uses:
@@ -348,6 +363,7 @@ The application uses:
 ```text
 storage/
 ├── recommendation_index_status.json
+├── exports/
 └── papers/
 ```
 
@@ -694,6 +710,24 @@ storage/recommendation_index_status.json
 ```
 
 This file records whether repository changes have made the recommendation index stale.
+
+### Battle log exports
+
+```text
+storage/exports/
+```
+
+The Arena writes a JSONL archive of its recorded battle runs here when the
+battle log is archived and reset, for example:
+
+```text
+storage/exports/battle_runs-20261009-142501.jsonl
+```
+
+Each line carries one run in full, including the consensus ranking and
+pairwise agreement computed at the time. The directory is created when the
+first archive is written. Existing archives are never overwritten, and
+nothing in the application deletes them -- this is collected study data.
 
 ---
 

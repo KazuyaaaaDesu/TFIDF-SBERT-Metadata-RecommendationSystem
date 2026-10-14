@@ -10,8 +10,11 @@ including Zotero -- actually build on:
                open-access status, abstracts, retraction flags.
     Crossref   the DOI registry; publisher-deposited metadata for
                journals, proceedings and book chapters.
+    arXiv      preprints (opt-in).
+    DOAJ       open-access journal articles from vetted journals
+               (opt-in).
 
-Both are free, keyless, and explicitly allow this kind of query.
+All are free, keyless, and explicitly allow this kind of query.
 
 PEER-REVIEWED FILTERING
     With peer_reviewed=True (the default) only publication types
@@ -41,6 +44,7 @@ import re
 import threading
 import time
 import xml.etree.ElementTree as ET
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, asdict
 
@@ -68,7 +72,7 @@ PEER_REVIEWED_TYPES = {"journal-article", "proceedings-article", "book-chapter"}
 # peer-reviewed filter.
 NON_PEER_TYPES = {"posted-content", "report", "book", "monograph"}
 
-SOURCES = ("openalex", "crossref", "arxiv")
+SOURCES = ("openalex", "crossref", "arxiv", "doaj")
 
 OPENALEX_TYPE_FILTER = "type:article|book-chapter"
 
@@ -133,6 +137,7 @@ _SEARCH_LABELS = {
     "openalex": "openalex-search",
     "crossref": "crossref-search",
     "arxiv": "arxiv-search",
+    "doaj": "doaj-search",
 }
 
 
@@ -593,6 +598,167 @@ def _search_arxiv(
 
 
 # ---------------------------------------------------------------------
+# DOAJ
+# ---------------------------------------------------------------------
+
+_DOAJ_API = "https://doaj.org/api/search/articles/"
+
+# Characters with meaning in Elasticsearch query strings. A user query
+# is free text, so they are neutralised rather than interpreted (the
+# query travels in the URL path, where "/" would also break routing).
+_DOAJ_SPECIAL = re.compile(r'[+\-=&|><!(){}\[\]^"~*?:\\/]')
+
+
+def _doaj_clean_query(query: str) -> str:
+    cleaned = _DOAJ_SPECIAL.sub(" ", query)
+    # Bare AND / OR / NOT would be read as operators.
+    words = [
+        word.lower() if word in ("AND", "OR", "NOT") else word
+        for word in cleaned.split()
+    ]
+    return " ".join(words)
+
+
+def _search_doaj(
+    query: str,
+    *,
+    year_min: int | None,
+    year_max: int | None,
+    sort: str,
+    limit: int,
+) -> list[WebSearchResult] | None:
+    """Query the DOAJ article search API (official, keyless).
+
+    DOAJ indexes only open-access articles from vetted journals, so
+    every hit is open access and a journal article; the peer-reviewed
+    default needs no special handling. Opt-in like arXiv.
+
+    DOAJ has no citation counts, and sorting server-side on
+    bibjson.year times out upstream, so "year" and "citations" are
+    handled by the shared merge (relevance order is requested).
+    """
+
+    cleaned = _doaj_clean_query(query)
+
+    if not cleaned:
+        return []
+
+    # Year filter as an Elasticsearch range appended to the query.
+    if year_min is not None or year_max is not None:
+        low = str(year_min) if year_min is not None else "*"
+        high = str(year_max) if year_max is not None else "*"
+        cleaned = f"({cleaned}) AND bibjson.year:[{low} TO {high}]"
+
+    response = _get_with_retry(
+        _DOAJ_API + quote(cleaned, safe=""),
+        params={
+            "page": 1,
+            "pageSize": min(max(limit * 2, limit), 40),
+        },
+        headers={
+            "User-Agent": (
+                f"PaperRec/1.0 (mailto:{UNPAYWALL_CONTACT_EMAIL})"
+            ),
+        },
+        source="doaj-search",
+        respect_429_backoff=False,
+    )
+
+    if response is None or not response.ok:
+        logger.debug(
+            "[web_search] DOAJ unavailable (status=%s)",
+            getattr(response, "status_code", None),
+        )
+        return None
+
+    try:
+        items = response.json().get("results") or []
+    except ValueError:
+        return None
+
+    results: list[WebSearchResult] = []
+
+    for item in items:
+        bib = item.get("bibjson") or {}
+
+        title = " ".join((bib.get("title") or "").split())
+
+        if not title:
+            continue
+
+        doi = None
+        for identifier in bib.get("identifier") or []:
+            if (
+                isinstance(identifier, dict)
+                and (identifier.get("type") or "").lower() == "doi"
+                and (identifier.get("id") or "").strip()
+            ):
+                doi = _normalize_doi(identifier["id"])
+                break
+
+        year_raw = str(bib.get("year") or "").strip()
+        year = int(year_raw) if year_raw.isdigit() else None
+
+        # Never trust the upstream filter alone.
+        if year_min is not None and year is not None and year < year_min:
+            continue
+        if year_max is not None and year is not None and year > year_max:
+            continue
+
+        authors = "; ".join(
+            " ".join((author.get("name") or "").split())
+            for author in bib.get("author") or []
+            if isinstance(author, dict)
+            and (author.get("name") or "").strip()
+        ) or None
+
+        abstract = " ".join((bib.get("abstract") or "").split()) or None
+        if abstract and len(abstract) > _ABSTRACT_MAX_CHARS:
+            abstract = abstract[:_ABSTRACT_MAX_CHARS]
+
+        venue = (
+            (bib.get("journal") or {}).get("title") or ""
+        ).strip() or None
+
+        landing_url = None
+        pdf_url = None
+        for link in bib.get("link") or []:
+            if not isinstance(link, dict):
+                continue
+            url = (link.get("url") or "").strip()
+            if not url or (link.get("type") or "") != "fulltext":
+                continue
+            landing_url = landing_url or url
+            if pdf_url is None and url.lower().split("?")[0].endswith(
+                ".pdf"
+            ):
+                pdf_url = url
+
+        if landing_url is None and doi:
+            landing_url = f"https://doi.org/{doi}"
+
+        results.append(
+            WebSearchResult(
+                title=title,
+                author=authors,
+                abstract=abstract,
+                publication_year=year,
+                doi=doi,
+                venue=venue,
+                source="doaj",
+                citations=None,
+                # DOAJ lists open-access journals only.
+                is_oa=True,
+                landing_url=landing_url,
+                document_type=_DOCUMENT_TYPE_MAP["journal-article"],
+                pdf_url=pdf_url,
+            )
+        )
+
+    return results
+
+
+# ---------------------------------------------------------------------
 # Merge + cache
 # ---------------------------------------------------------------------
 
@@ -628,12 +794,14 @@ def _merge(
     openalex_results: list[WebSearchResult],
     crossref_results: list[WebSearchResult],
     arxiv_results: list[WebSearchResult],
+    doaj_results: list[WebSearchResult] | None,
     sort: str,
     limit: int,
 ) -> list[WebSearchResult]:
     if sort == "citations":
         candidates = (
             openalex_results + crossref_results + arxiv_results
+            + (doaj_results or [])
         )
         candidates.sort(
             key=lambda result: result.citations or 0,
@@ -642,6 +810,7 @@ def _merge(
     elif sort == "year":
         candidates = (
             openalex_results + crossref_results + arxiv_results
+            + (doaj_results or [])
         )
         candidates.sort(
             key=lambda result: result.publication_year or 0,
@@ -653,6 +822,7 @@ def _merge(
             openalex_results,
             crossref_results,
             arxiv_results,
+            doaj_results or [],
         )
 
     # Deduplicate: DOI first (OpenAlex entries win -- they carry
@@ -717,6 +887,15 @@ def _fetch_source(
                 sort=sort,
                 limit=limit,
             )
+        elif source == "doaj":
+            # DOAJ is open-access journal articles only; opt-in.
+            results = _search_doaj(
+                query,
+                year_min=year_min,
+                year_max=year_max,
+                sort=sort,
+                limit=limit,
+            )
         else:
             # arXiv is an explicit opt-in source: it runs even under the
             # peer-reviewed default because choosing it is the user's
@@ -772,7 +951,7 @@ def search_web(
 
     # Open-access-only relies on OpenAlex's OA flag; Crossref cannot
     # answer that question, so it is dropped rather than guessed.
-    # arXiv is open access by nature and stays.
+    # arXiv and DOAJ are open access by nature and stay.
     if open_access_only and "crossref" in requested:
         requested = tuple(s for s in requested if s != "crossref")
 
@@ -944,11 +1123,13 @@ def _search_all_sources(
     openalex_results = collected.get("openalex")
     crossref_results = collected.get("crossref")
     arxiv_results = collected.get("arxiv")
+    doaj_results = collected.get("doaj")
 
     if (
         openalex_results is None
         and crossref_results is None
         and arxiv_results is None
+        and doaj_results is None
     ):
         raise WebSearchError("Every web search source failed.")
 
@@ -956,6 +1137,7 @@ def _search_all_sources(
         openalex_results or [],
         crossref_results or [],
         arxiv_results or [],
+        doaj_results or [],
         sort,
         limit,
     )

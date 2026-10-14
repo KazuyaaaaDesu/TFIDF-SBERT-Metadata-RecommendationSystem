@@ -145,6 +145,119 @@ export interface LiveBackground {
   still: boolean;
 }
 
+/** A typeface the developer panel can try. `google` is the css2 family query (no weights when the face has one). */
+export interface FontChoice {
+  id: string;
+  label: string;
+  stack: string;
+  google?: string;
+}
+
+export const FONT_CHOICES: FontChoice[] = [
+  { id: "inter", label: "Inter", stack: '"Inter", system-ui, sans-serif', google: "Inter:wght@400;500;600;700;800" },
+  { id: "pixelify", label: "Pixelify Sans", stack: '"Pixelify Sans", "Inter", system-ui, sans-serif', google: "Pixelify+Sans:wght@400;500;600;700" },
+  { id: "plex-sans", label: "IBM Plex Sans", stack: '"IBM Plex Sans", system-ui, sans-serif', google: "IBM+Plex+Sans:wght@400;500;600;700" },
+  { id: "plex-serif", label: "IBM Plex Serif", stack: '"IBM Plex Serif", Georgia, serif', google: "IBM+Plex+Serif:wght@400;500;600;700" },
+  { id: "dm-sans", label: "DM Sans", stack: '"DM Sans", system-ui, sans-serif', google: "DM+Sans:wght@400;500;600;700" },
+  { id: "space-grotesk", label: "Space Grotesk", stack: '"Space Grotesk", system-ui, sans-serif', google: "Space+Grotesk:wght@400;500;600;700" },
+  { id: "atkinson", label: "Atkinson Hyperlegible", stack: '"Atkinson Hyperlegible", system-ui, sans-serif', google: "Atkinson+Hyperlegible:wght@400;700" },
+  { id: "lora", label: "Lora", stack: '"Lora", Georgia, serif', google: "Lora:wght@400;500;600;700" },
+  { id: "merriweather", label: "Merriweather", stack: '"Merriweather", Georgia, serif', google: "Merriweather:wght@400;700" },
+  { id: "source-serif", label: "Source Serif 4", stack: '"Source Serif 4", Georgia, serif', google: "Source+Serif+4:wght@400;600;700" },
+  { id: "playfair", label: "Playfair Display", stack: '"Playfair Display", Georgia, serif', google: "Playfair+Display:wght@400;600;700" },
+  { id: "roboto-slab", label: "Roboto Slab", stack: '"Roboto Slab", Georgia, serif', google: "Roboto+Slab:wght@400;500;700" },
+  { id: "jetbrains", label: "JetBrains Mono", stack: '"JetBrains Mono", ui-monospace, monospace', google: "JetBrains+Mono:wght@400;500;700" },
+  { id: "fira-code", label: "Fira Code", stack: '"Fira Code", ui-monospace, monospace', google: "Fira+Code:wght@400;500;700" },
+  { id: "press-start", label: "Press Start 2P", stack: '"Press Start 2P", monospace', google: "Press+Start+2P" },
+  { id: "vt323", label: "VT323", stack: '"VT323", monospace', google: "VT323" },
+  { id: "georgia", label: "Georgia (system)", stack: 'Georgia, "Iowan Old Style", "Times New Roman", serif' },
+  { id: "system", label: "System UI", stack: "system-ui, -apple-system, sans-serif" },
+  { id: "mono-system", label: "System mono", stack: "ui-monospace, Menlo, Consolas, monospace" },
+];
+
+export const CUSTOM_FONT = "custom";
+
+/** The face for one role: a catalog id, or `custom` with a family name typed by the developer. */
+export interface FontSlot {
+  id: string | null;
+  custom: string;
+}
+
+export interface TypeTweaks {
+  body: FontSlot;
+  heading: FontSlot;
+  /** Root size multiplier: everything in rem follows. */
+  scale: number;
+  /** Extra letter spacing in em. */
+  tracking: number;
+  /** Body line height multiplier, 0 = leave to the page. */
+  lineHeight: number;
+}
+
+export const TYPE_LIMITS = {
+  scale: { min: 0.8, max: 1.4, step: 0.05 },
+  tracking: { min: -0.03, max: 0.12, step: 0.005 },
+  lineHeight: { min: 0, max: 2.2, step: 0.05 },
+} as const;
+
+export const DEFAULT_TYPE: TypeTweaks = {
+  body: { id: null, custom: "" },
+  heading: { id: null, custom: "" },
+  scale: 1,
+  tracking: 0,
+  lineHeight: 0,
+};
+
+const clamp = (v: unknown, lo: number, hi: number, fallback: number) =>
+  typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
+
+function normalizeSlot(raw: unknown): FontSlot {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Partial<FontSlot>;
+  const custom = typeof o.custom === "string" ? o.custom.replace(/[^\w .-]/g, "").trim().slice(0, 60) : "";
+  const known = o.id === CUSTOM_FONT || FONT_CHOICES.some((f) => f.id === o.id);
+
+  return { id: known && (o.id !== CUSTOM_FONT || custom) ? (o.id as string) : null, custom };
+}
+
+export function normalizeType(raw: unknown): TypeTweaks {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Partial<TypeTweaks>;
+  const L = TYPE_LIMITS;
+
+  return {
+    body: normalizeSlot(o.body),
+    heading: normalizeSlot(o.heading),
+    scale: clamp(o.scale, L.scale.min, L.scale.max, 1),
+    tracking: clamp(o.tracking, L.tracking.min, L.tracking.max, 0),
+    lineHeight: clamp(o.lineHeight, L.lineHeight.min, L.lineHeight.max, 0),
+  };
+}
+
+/** The css font stack and Google query for a slot, or null for "leave the page's own". */
+export function resolveFont(slot: FontSlot): { stack: string; google?: string } | null {
+  if (slot.id === CUSTOM_FONT && slot.custom) {
+    return {
+      stack: `"${slot.custom}", system-ui, sans-serif`,
+      google: slot.custom.trim().replace(/\s+/g, "+"),
+    };
+  }
+  const choice = FONT_CHOICES.find((f) => f.id === slot.id);
+
+  return choice ? { stack: choice.stack, google: choice.google } : null;
+}
+
+const loadedFonts = new Set<string>();
+
+/** Fetch a Google font once, on demand (a bad name simply falls back to the stack). */
+export function ensureGoogleFont(query: string | undefined): void {
+  if (!query || loadedFonts.has(query) || typeof document === "undefined") return;
+  loadedFonts.add(query);
+  const link = document.createElement("link");
+
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?family=${query}&display=swap`;
+  document.head.appendChild(link);
+}
+
 export interface UiCustom {
   skin: SkinId | null;
   crt: boolean;
@@ -152,6 +265,8 @@ export interface UiCustom {
   live: LiveBackground;
   /** Each look brings its own live wallpaper (on by default). */
   wallpaper: boolean;
+  /** Typefaces and type tweaks (developer panel). */
+  type: TypeTweaks;
   /** Hidden cheats the player has found. */
   discovered: string[];
 }
@@ -162,6 +277,7 @@ export const DEFAULT_UI_CUSTOM: UiCustom = {
   pixelFont: false,
   live: { on: false, scene: "garden", dim: 0.78, still: false },
   wallpaper: true,
+  type: DEFAULT_TYPE,
   discovered: [],
 };
 
@@ -187,6 +303,7 @@ export function normalize(raw: unknown): UiCustom {
       still: live.still === true,
     },
     wallpaper: o.wallpaper !== false,
+    type: normalizeType(o.type),
     discovered: Array.isArray(o.discovered)
       ? o.discovered.filter((id): id is string => typeof id === "string")
       : [],
@@ -291,6 +408,26 @@ export function applyUiCustom(root: HTMLElement = document.documentElement): voi
     if (on) root.setAttribute(name, "");
     else root.removeAttribute(name);
   };
+
+  const body = resolveFont(custom.type.body);
+  const heading = resolveFont(custom.type.heading);
+  const style = root.style;
+
+  for (const [name, font] of [["--font-body", body], ["--font-display", heading]] as const) {
+    if (font) {
+      ensureGoogleFont(font.google);
+      style.setProperty(name, font.stack);
+    } else {
+      style.removeProperty(name);
+    }
+  }
+  flag("data-font-body", body !== null);
+  flag("data-font-heading", heading !== null);
+  style.fontSize = custom.type.scale === 1 ? "" : `${custom.type.scale * 100}%`;
+  if (custom.type.tracking) style.setProperty("--type-tracking", `${custom.type.tracking}em`);
+  else style.removeProperty("--type-tracking");
+  if (custom.type.lineHeight) style.setProperty("--type-leading", String(custom.type.lineHeight));
+  else style.removeProperty("--type-leading");
 
   flag("data-crt", custom.crt);
   flag("data-pixelfont", custom.pixelFont);

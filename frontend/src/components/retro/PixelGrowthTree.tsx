@@ -24,8 +24,15 @@ import {
   vineShown,
   vineSpecs,
 } from "../../utils/ascentAccents";
-import { leafPixels } from "../../utils/leafShapes";
-import { drawCharms } from "./gardenCharms";
+import {
+  CASTLE_H,
+  CASTLE_W,
+  castleSprite,
+  drawCastle as paintCastleSprite,
+  type CastlePainter,
+} from "../../utils/castleSprite";
+import { leafPixels, type LeafShape } from "../../utils/leafShapes";
+import { drawCharms, type CharmEnv } from "./gardenCharms";
 import {
   resolveVariant,
   tintBark,
@@ -332,7 +339,90 @@ const SHAPES: Record<TreeSpeciesId, TreeShape> = {
       { cx: 520, cy: 725, rx: 26, ry: 9, tone: 0.5, lo: 2, hi: 3.2, start: 0.93 },
       { cx: 285, cy: 722, rx: 22, ry: 8, tone: 0.55, lo: 1.8, hi: 2.8, start: 0.95 },
     ],
-  }
+  },
+  beanstalk: {
+    topFoliage: 6,
+    trunk: [
+      [400, 742], [372, 688], [430, 626], [366, 562], [434, 498], [368, 434],
+      [432, 370], [372, 306], [428, 242], [384, 178], [414, 118], [398, 66],
+    ],
+    trunkW: [58, 50, 46, 42, 38, 35, 32, 29, 26, 23, 19, 14],
+    branches: [
+      { pts: [[372,562],[316,548],[258,530],[210,548],[188,596]], ws: [16,13,9,6,3], b0: .16, dur: .2 },
+      { pts: [[434,498],[492,480],[552,462],[600,478],[620,526]], ws: [16,13,9,6,3], b0: .17, dur: .2 },
+      { pts: [[368,434],[310,414],[252,388],[222,350],[240,318]], ws: [15,12,8,5,3], b0: .21, dur: .2 },
+      { pts: [[432,370],[492,350],[548,322],[576,284],[556,252]], ws: [15,12,8,5,3], b0: .23, dur: .2 },
+      { pts: [[372,306],[322,286],[276,258],[252,222],[272,194]], ws: [13,10,7,4,2], b0: .27, dur: .18 },
+      { pts: [[428,242],[478,222],[524,196],[546,160],[524,134]], ws: [13,10,7,4,2], b0: .29, dur: .18 },
+      { pts: [[384,178],[352,156],[326,128],[332,96]], ws: [10,8,5,3], b0: .33, dur: .14 },
+      { pts: [[414,118],[446,98],[470,74]], ws: [9,6,3], b0: .36, dur: .12 },
+      { pts: [[400,735],[348,742],[298,738]], ws: [24,13,5], b0: -.07, dur: .12 },
+      { pts: [[403,735],[456,742],[506,738]], ws: [24,13,5], b0: -.06, dur: .12 },
+    ],
+    clusters: [
+      [400,58,36,28,.82],[400,104,60,34,.74],
+      [310,170,74,36,.68],[490,170,74,36,.68],[400,210,56,32,.6],
+      [270,252,84,38,.62],[530,252,84,38,.62],[400,290,54,30,.52],
+      [242,336,88,40,.56],[558,336,88,40,.56],[400,372,56,32,.48],
+      [214,416,84,38,.5],[586,416,84,38,.5],[400,452,56,30,.44],
+      [200,500,74,34,.46],[600,500,74,34,.46],[400,532,52,28,.4],
+      [212,584,60,30,.42],[588,584,60,30,.42],[300,540,56,26,.4],[500,540,56,26,.4],
+    ].map(([cx, cy, rx, ry, tone]) => ({
+      /* a slim, leafy ladder up the stalk rather than a round crown */
+      cx: 400 + (cx - 400) * 0.66,
+      cy,
+      rx: rx * 0.72,
+      ry: ry * 0.86,
+      tone,
+      lo: 3.4,
+      hi: 5.2,
+    })),
+    elder: [
+      { cx: 520, cy: 725, rx: 26, ry: 9, tone: 0.5, lo: 2, hi: 3.2, start: 0.93 },
+      { cx: 285, cy: 722, rx: 22, ry: 8, tone: 0.55, lo: 1.8, hi: 2.8, start: 0.95 },
+    ],
+  },
+  rosevine: {
+    topFoliage: 5,
+    /* a rose shrub, thickened into a vine: a short, twisting main cane
+       that throws thick arching canes out and down, thorned all over */
+    trunk: [
+      [400, 742], [388, 700], [414, 652], [392, 604], [412, 554],
+      [398, 504], [406, 454], [400, 404],
+    ],
+    trunkW: [136, 118, 106, 96, 86, 76, 64, 52],
+    branches: [
+      { pts: [[392,690],[330,640],[250,606],[168,628],[120,688],[100,742]], ws: [46,38,30,22,13,6], b0: .1, dur: .22 },
+      { pts: [[410,690],[480,640],[560,606],[642,628],[690,688],[708,742]], ws: [46,38,30,22,13,6], b0: .11, dur: .22 },
+      { pts: [[396,600],[322,540],[238,498],[160,508],[110,560],[96,632]], ws: [40,32,24,16,9,4], b0: .15, dur: .22 },
+      { pts: [[412,596],[486,536],[570,494],[648,504],[698,556],[712,628]], ws: [40,32,24,16,9,4], b0: .16, dur: .22 },
+      { pts: [[398,504],[340,440],[272,392],[202,390],[152,434],[132,502]], ws: [34,27,20,13,7,3], b0: .2, dur: .2 },
+      { pts: [[406,500],[466,436],[534,388],[604,386],[654,430],[672,498]], ws: [34,27,20,13,7,3], b0: .21, dur: .2 },
+      { pts: [[404,452],[424,386],[404,324],[366,278],[350,226]], ws: [30,23,16,9,4], b0: .26, dur: .18 },
+      { pts: [[400,420],[440,360],[492,318],[552,310],[596,340]], ws: [26,20,14,8,3], b0: .28, dur: .18 },
+      { pts: [[400,420],[360,360],[308,320],[248,314],[206,346]], ws: [26,20,14,8,3], b0: .29, dur: .18 },
+      { pts: [[250,606],[226,570],[232,526]], ws: [12,8,4], b0: .3, dur: .12 },
+      { pts: [[560,606],[584,570],[578,526]], ws: [12,8,4], b0: .31, dur: .12 },
+      { pts: [[400,735],[336,742],[284,738]], ws: [28,15,5], b0: -.07, dur: .12 },
+      { pts: [[403,735],[466,742],[518,738]], ws: [28,15,5], b0: -.06, dur: .12 },
+    ],
+    clusters: [
+      [400,232,80,44,.74],[330,268,80,44,.68],[470,268,80,44,.68],
+      [260,318,90,48,.62],[540,318,90,48,.62],[400,318,100,50,.58],
+      [190,388,90,50,.58],[610,388,90,50,.58],[330,380,90,48,.52],[470,380,90,48,.52],
+      [130,470,84,54,.54],[670,470,84,54,.54],[250,462,90,50,.48],[550,462,90,50,.48],[400,456,90,46,.46],
+      [100,560,72,52,.52],[700,560,72,52,.52],[200,558,90,50,.46],[600,558,90,50,.46],[330,540,80,44,.42],[470,540,80,44,.42],
+      [110,650,62,46,.48],[690,650,62,46,.48],[210,652,80,42,.44],[590,652,80,42,.44],[320,640,70,36,.4],[480,640,70,36,.4],
+      [160,718,62,28,.42],[640,718,62,28,.42],
+    ].map(([cx, cy, rx, ry, tone]) => ({
+      /* leave the canes showing between the leafy masses */
+      cx, cy, rx: rx * (cy > 480 ? 0.6 : 0.78), ry: ry * (cy > 480 ? 0.66 : 0.8), tone, lo: 2.6, hi: 4.2,
+    })),
+    elder: [
+      { cx: 520, cy: 725, rx: 26, ry: 9, tone: 0.5, lo: 2, hi: 3.2, start: 0.93 },
+      { cx: 285, cy: 722, rx: 22, ry: 8, tone: 0.55, lo: 1.8, hi: 2.8, start: 0.95 },
+    ],
+  },
 };
 
 /* ---------- palettes ---------- */
@@ -408,12 +498,20 @@ interface Art {
   trunkGateY: number;
   trunkDash: boolean;
   /** How the bark is drawn: the shared cell pattern, or a species' own. */
-  barkStyle: "cells" | "plates" | "furrows" | "peel" | "lattice" | "fibres";
+  barkStyle: "cells" | "plates" | "furrows" | "peel" | "lattice" | "fibres" | "twist" | "thorns";
   trunkFracY: number;
   trunkCxwAmp: number;
   trunkLowW: number;
   /** The source's leaf silhouette (the `e = r*(...)` formula). */
-  leafShape: "maple" | "lobed" | "birch" | "elm" | "redwood";
+  leafShape: LeafShape;
+  /** A second leaf design, drawn in the ramps listed in `altRamps`
+      (the rose: sprigs of leaves among the blooms). */
+  altShape?: LeafShape;
+  altRamps?: number[];
+  /** How the young trunk and limbs are dressed: twisted rope, or thorned. */
+  limbStyle?: "twist" | "thorn";
+  /** Frequency of the ancient trunk's sideways sway (default 0.0023). */
+  trunkCxwK?: number;
   /** The source's four palettes for multi-hue leaves (gold/orange/
      crimson/green families per tree). */
   leafRamps?: number[][][];
@@ -744,6 +842,128 @@ const REDWOOD_ART: Art = {
   leafRamps: REDWOOD_RAMPS,
 };
 
+/* The beanstalk's three leaflet greens plus the young green. */
+const BN_1 = ["#0c3416", "#16601f", "#2c9a2c", "#5cc83e", "#a6ee6a"].map(hexToRgb);
+const BN_2 = ["#2c4a0c", "#4f7a14", "#86b020", "#b8dc3c", "#e6f78a"].map(hexToRgb);
+const BN_3 = ["#0a3a30", "#146050", "#228a62", "#44b886", "#8ee0b4"].map(hexToRgb);
+const BN_GRN = ["#0e3a1a", "#1c6a28", "#38a834", "#6ed850", "#c4f58a"].map(hexToRgb);
+const BEAN_RAMPS = [BN_1, BN_2, BN_3, BN_GRN];
+
+/* The rose's two bloom colors, then the leaf green (used twice: the
+   third family and the young foliage), drawn as sprigs. */
+const RS_1 = ["#3a0716", "#780f2c", "#c4204a", "#ea4a74", "#ff93b0"].map(hexToRgb);
+const RS_2 = ["#7a2a48", "#c4587c", "#ea85a6", "#fbb4ca", "#ffe3ec"].map(hexToRgb);
+const RS_LEAF = ["#0c2a14", "#17481f", "#2a7430", "#4aa04a", "#88d076"].map(hexToRgb);
+const ROSE_RAMPS = [RS_1, RS_2, RS_LEAF, RS_LEAF];
+
+const BEAN_ART: Art = {
+  leafPoints: 5,
+  leafAmp: 0.22,
+  BX: W / 2,
+  ROOTX: 400,
+  ZM: 3.0,
+  DYW: 3600,
+  cellY: 52,
+  cellW: 7,
+  fxE: 0.13,
+  fyE: 0.05,
+  noiseL: 8,
+  noiseY: 12,
+  baseW: 18,
+  fillCX: 404,
+  baseCX: 400,
+  baseRW: 64,
+  WP: [
+    [742, 84], [600, 74], [400, 66], [245, 60],
+    [0, 54], [-1000, 50], [-3000, 44],
+  ],
+  wWdef: 54,
+  acorn: false,
+  ground: [
+    [168, 104, 52],
+    [222, 170, 96],
+  ],
+  blinkNear: 2.6,
+  blinkWin: 0.09,
+  clusterCX: 400,
+  clusterCY: 320,
+  clusterR: 320,
+  mapleLeaf: false,  trunkCellY: 120,
+  trunkCellMul: 6,
+  trunkLatJ: 7,
+  trunkYJ: 8,
+  trunkLatLean: 0,
+  trunkNoiseL: 0.5,
+  trunkNoiseY: 0.02,
+  trunkNoiseAmp: 0.25,
+  trunkGateX: 0.14,
+  trunkGateY: 0.03,
+  trunkDash: false,
+  barkStyle: "twist",
+  trunkFracY: 80,
+  trunkCxwAmp: 40,
+  trunkCxwK: 0.0056,
+  trunkLowW: 18,
+  leafShape: "bean",
+  leafRamps: BEAN_RAMPS,
+  limbStyle: "twist",
+};
+
+const ROSE_ART: Art = {
+  leafPoints: 5,
+  leafAmp: 0.24,
+  BX: W / 2,
+  ROOTX: 400,
+  ZM: 3.4,
+  DYW: 3000,
+  cellY: 60,
+  cellW: 8,
+  fxE: 0.14,
+  fyE: 0.05,
+  noiseL: 8,
+  noiseY: 12,
+  baseW: 30,
+  fillCX: 402,
+  baseCX: 400,
+  baseRW: 124,
+  WP: [
+    [742, 196], [600, 168], [400, 146], [245, 130],
+    [0, 114], [-1000, 100], [-3000, 84],
+  ],
+  wWdef: 100,
+  acorn: false,
+  ground: [
+    [170, 28, 40],
+    [236, 86, 80],
+  ],
+  blinkNear: 3.0,
+  blinkWin: 0.11,
+  clusterCX: 402,
+  clusterCY: 470,
+  clusterR: 400,
+  mapleLeaf: false,  trunkCellY: 90,
+  trunkCellMul: 9,
+  trunkLatJ: 9,
+  trunkYJ: 8,
+  trunkLatLean: 0,
+  trunkNoiseL: 0.4,
+  trunkNoiseY: 0.03,
+  trunkNoiseAmp: 0.2,
+  trunkGateX: 0.14,
+  trunkGateY: 0.03,
+  trunkDash: false,
+  barkStyle: "thorns",
+  trunkFracY: 400,
+  trunkCxwAmp: 56,
+  trunkCxwK: 0.0042,
+  trunkLowW: 30,
+  leafShape: "rose",
+  leafRamps: ROSE_RAMPS,
+  altShape: "sprig",
+  altRamps: [2, 3],
+  limbStyle: "thorn",
+};
+
 const MAPLE_ART: Art = {
   leafPoints: 5,
   leafAmp: 0.26,
@@ -822,6 +1042,36 @@ const REDWOOD_PALETTE: Palette = {
   /* (R_2 — the source's middle needle family, listed verbatim) */
   accent: "#3f6a30",
   cream: ["#2f6a34", "#4a8a3c", "#8a4a2a"],
+};
+
+const BEAN_PALETTE: Palette = {
+  bark: ["#173a12", "#2a5a1c", "#43822a", "#6ab43c"],
+  foliage: ["#0e3a1a", "#1c6a28", "#38a834", "#6ed850", "#c4f58a"],
+  accent: "#3a6a28",
+  cream: ["#e8f5a0", "#c8e070", "#8fba3a"],
+};
+
+const ROSE_PALETTE: Palette = {
+  bark: ["#1a0d14", "#2e1522", "#4a2236", "#6a3550"],
+  foliage: ["#4a0a1e", "#8a1236", "#d81f5b", "#f0507e", "#ff9cbc"],
+  accent: "#3a6a30",
+  cream: ["#ffd6e2", "#ffb3cb", "#e88aa8"],
+};
+
+const BEAN_WORLD = {
+  BK: ["#0d2a10", "#173d14", "#245a1c", "#357f26", "#52a838", "#86d055"].map(hexToRgb),
+  MS: ["#1f4a1a", "#2f7a26", "#58a83a"].map(hexToRgb),
+  LICH: hexToRgb("#b8d98a"),
+  AMB: ["#2a5a14", "#6ab032", "#d4f060"].map(hexToRgb),
+  FUN: [],
+};
+
+const ROSE_WORLD = {
+  BK: ["#150a10", "#27121d", "#3f1f30", "#5a2f46", "#7e4864", "#e8c8a0"].map(hexToRgb),
+  MS: ["#1f4a2a", "#36783a", "#5aa04a"].map(hexToRgb),
+  LICH: hexToRgb("#d8b8c8"),
+  AMB: ["#5a1230", "#c02a5e", "#ff7aa6"].map(hexToRgb),
+  FUN: [],
 };
 
 const OAK_PALETTE: Palette = {
@@ -907,6 +1157,8 @@ export default function PixelGrowthTree({
   const pokesRef = useRef<Record<string, number>>({});
   const hitsRef = useRef<{ key: string; x: number; y: number; w: number; h: number }[]>([]);
   const hoverRef = useRef<string | null>(null);
+  /* when each field rose was last double-clicked (render clock, seconds) */
+  const burstRef = useRef<Record<string, number>>({});
   const creatureAt = (clientX: number, clientY: number): string | null => {
     const canvas = ref.current;
 
@@ -928,6 +1180,9 @@ export default function PixelGrowthTree({
   };
   const layersRef = useRef<ReadonlySet<string>>(new Set());
   layersRef.current = new Set(layersOff ?? []);
+  /* What the creatures remember between frames (where they are, what they
+     are doing), so they can walk to their next spot and follow the tree. */
+  const memoRef = useRef<Map<string, unknown>>(new Map());
   const charmsRef = useRef<readonly string[]>([]);
   charmsRef.current = charms ?? [];
   const ref = useRef<HTMLCanvasElement | null>(null);
@@ -955,7 +1210,11 @@ export default function PixelGrowthTree({
             ? ELM_PALETTE
             : speciesId === "redwood"
               ? REDWOOD_PALETTE
-              : ramps(species.leafLight, species.leaf, species.leafDeep);
+              : speciesId === "beanstalk"
+                ? BEAN_PALETTE
+                : speciesId === "rosevine"
+                  ? ROSE_PALETTE
+                  : ramps(species.leafLight, species.leaf, species.leafDeep);
   const art = speciesId === "oak"
     ? OAK_ART
     : speciesId === "crimson"
@@ -966,7 +1225,11 @@ export default function PixelGrowthTree({
           ? ELM_ART
           : speciesId === "redwood"
             ? REDWOOD_ART
-            : CRIMSON_ART;
+            : speciesId === "beanstalk"
+              ? BEAN_ART
+              : speciesId === "rosevine"
+                ? ROSE_ART
+                : CRIMSON_ART;
   const speciesKey = `${speciesId}:${species.label}`;
 
   /* The growth prop ref, read by the animation loop. */
@@ -1039,6 +1302,15 @@ export default function PixelGrowthTree({
       AMB = REDWOOD_WORLD.AMB;
       FUN = REDWOOD_WORLD.FUN;
       SPL = [];
+    } else if (speciesId === "beanstalk" || speciesId === "rosevine") {
+      const W2 = speciesId === "beanstalk" ? BEAN_WORLD : ROSE_WORLD;
+
+      BK = W2.BK;
+      MS = W2.MS;
+      LICH = W2.LICH;
+      AMB = W2.AMB;
+      FUN = W2.FUN;
+      SPL = [];
     } else if (speciesId === "birch") {
       BK = BIRCH_WORLD.BK;
       MS = BIRCH_WORLD.MS;
@@ -1065,6 +1337,10 @@ export default function PixelGrowthTree({
     }
     /* Leaf color sets, in the variant's colors. */
     const LEAF_RAMPS = art.leafRamps ? art.leafRamps.map(tfAll) : null;
+    /* Ramps drawn with the species' second leaf design (the rose's sprigs). */
+    const ALT_RAMPS = new Set<number[][]>(
+      LEAF_RAMPS && art.altRamps ? art.altRamps.map((i) => LEAF_RAMPS[i]) : [],
+    );
     const MAPLE_R = MAPLE_RAMPS.map(tfAll);
     const TURN_R = art.turnRamp ? tfAll(art.turnRamp) : undefined;
 
@@ -1099,6 +1375,21 @@ export default function PixelGrowthTree({
     };
 
     const R2 = rng(11);
+
+    /* The beanstalk is slim and sways a little: higher up the stalk
+       leans further, in a slow wave. The lean is a couple of screen
+       pixels at any zoom, so it stays a gentle sway rather than a
+       swing, and it is applied wherever the tree is placed (limbs,
+       leaves, the climbing trunk) so everything moves together. */
+    const isBean = speciesId === "beanstalk";
+    let BEND_T = 0;
+    let CURSG = 1;
+    const bendWorld = (wy: number, sg: number): number =>
+      isBean && !reduced
+        ? (1.9 / (S * Math.max(sg, 0.05))) *
+          Math.sin(BEND_T * 0.85 + wy * 0.0072) *
+          clamp((742 - wy) / 420, 0, 1)
+        : 0;
 
 
     /* ---- pollen dust (the reference's own sprinkle) ---- */
@@ -1233,7 +1524,9 @@ export default function PixelGrowthTree({
             cov[k] = 1;
             const n = clamp(dx / (w + 0.5), -1, 1);
             const band = Math.floor((n + 1) * 2.6) + salt * 8;
-            const v = 0.5 - 0.34 * n + (hash(i >> 2, band) - 0.5) * 0.42;
+            let v = 0.5 - 0.34 * n + (hash(i >> 2, band) - 0.5) * 0.42;
+            /* the beanstalk's limbs are ropes: strands wound round them */
+            if (art.limbStyle === "twist") v += 0.3 * Math.sin(i * 0.42 + n * 2.6);
             if (hash(px, py + 7) >= DM) {
               put(
                 px,
@@ -1244,6 +1537,18 @@ export default function PixelGrowthTree({
               );
             }
           }
+        }
+        /* the rose's canes are armed: a thorn every so often, pointing
+           out and down */
+        if (art.limbStyle === "thorn" && w > 0.9 && i % 4 === 2 && hash(i, 31) > 0.3) {
+          const side = hash(i, 32) > 0.5 ? 1 : -1;
+          const tx = Math.round(X + side * (w + 0.6));
+          const ty = Math.round(Y);
+
+          put(tx, ty, BK[5]);
+          put(tx + side, ty + 1, BK[5]);
+          put(tx + side * 2, ty + 2, BK[4]);
+          put(tx, ty + 1, BK[1]);
         }
       }
     };
@@ -1290,10 +1595,12 @@ export default function PixelGrowthTree({
       return art.wWdef;
     };
     const cxw = (y: number) =>
-      y >= art.trunkFracY
+      (y >= art.trunkFracY
         ? RX[clamp(Math.round(y), 0, 799)]
         : art.fillCX +
-          art.trunkCxwAmp * Math.sin((art.trunkFracY - y) * 0.0023);
+          art.trunkCxwAmp *
+            Math.sin((art.trunkFracY - y) * (art.trunkCxwK ?? 0.0023))) +
+      bendWorld(y, CURSG);
 
     /* ---- ancient-ascent decor ----
        The climb above the mature canopy would otherwise be a bare
@@ -1472,10 +1779,14 @@ export default function PixelGrowthTree({
     {
       const ccx = cxw(SUMMIT_Y);
 
-      while (CANOPY.length < 300) {
+      /* The beanstalk's summit is sparse: it opens out onto clouds and the
+         giant's castle instead of closing over in leaves. */
+      const sparse = speciesId === "beanstalk" || speciesId === "rosevine";
+
+      while (CANOPY.length < (speciesId === "beanstalk" ? 36 : sparse ? 36 : 300)) {
         const a = AR2() * 6.283;
         const d = Math.sqrt(AR2());
-        const y = SUMMIT_Y - 70 + Math.sin(a) * d * 190;
+        const y = (sparse ? SUMMIT_Y + 60 : SUMMIT_Y - 70) + Math.sin(a) * d * (sparse ? 110 : 190);
 
         if (y > SUMMIT_Y + 90) continue;
 
@@ -1533,7 +1844,10 @@ export default function PixelGrowthTree({
       kx: number,
     ) => {
       const p = o.sp[Math.min(o.sp.length - 1, Math.floor(u * (o.sp.length - 1)))];
-      return [AX + (p[0] - XF) * S * sg * kx, AY + (p[1] - YF) * S * sg];
+      return [
+        AX + (p[0] + bendWorld(p[1], sg) - XF) * S * sg * kx,
+        AY + (p[1] - YF) * S * sg,
+      ];
     };
     const AY = H - 9.3;
 
@@ -1560,12 +1874,17 @@ export default function PixelGrowthTree({
       v: 1.5 + skyRng() * 2.5,
       ph: skyRng() * 6.283,
     }));
-    /* The canopy's top leaves (already born at Mature) — where the
-       birds perch. */
+    /* The canopy's top leaves, once the crown is nearly whole — where the
+       birds perch. (The crown's growth `g` runs 0..1 over the first phase
+       of the climb; it is not the fertilizer fraction `matureG` is.) */
+    const BIRDS_AT = 0.9;
     const perches = [...leaves]
-      .filter((L) => L.b <= matureG)
+      .filter((L) => L.b <= BIRDS_AT - 0.05)
       .sort((a, b) => a.y - b.y)
       .slice(0, 10);
+    /* 0 while the birds are away, 1 once they have landed: they fly in
+       when the crown fills out and lift off when the tree shrinks. */
+    let BIRDS_HERE = 0;
 
     const SAP =
       speciesId === "birch"
@@ -1585,6 +1904,8 @@ export default function PixelGrowthTree({
        world height where the ancient bark currently ends. */
     let ROOT_REACH = 1;
     let TRUNK_TOP = -1e9;
+    /* the render clock in seconds, the same one that pokes are stamped with */
+    let CLOCK = 0;
     /* Where the young trunk ends, in world units: it stops inside the
        crown, so the bark that takes over has to climb out of it. */
     const YOUNG_TOP = TR.sp[TR.sp.length - 1][1];
@@ -1778,6 +2099,55 @@ export default function PixelGrowthTree({
           else if (fx < 0.3) v *= 0.72;
           if (strand > 0.86) v = 0.82;
           if (hash(s + 31, Math.floor(Y * 0.5)) > 0.95) v += 0.15;
+
+          return v;
+        }
+        case "twist": {
+          /* a rope of green strands wound round the stalk, with now and
+             then a knot where a tendril leaves it */
+          const warp = vn(Y * 0.011, 6) * 8;
+          const d = (L * 0.8 + Y * 0.5 + warp) / 13;
+          const f = d - Math.floor(d);
+          const strand = hash(Math.floor(d), 4);
+          let v = 0.5 + 0.2 * strand - 0.28 * n;
+
+          if (f < 0.13) v = 0.05 + 0.06 * strand;
+          else if (f > 0.5 && f < 0.64) v += 0.18;
+          if (hash(Math.floor(L * 0.7), Math.floor(Y * 0.6)) > 0.95) v += 0.18;
+
+          const knotRow = Math.floor(Y / 150);
+          const ky = Y / 150 - knotRow;
+
+          if (hash(knotRow, 8) > 0.45 && ky > 0.46 && ky < 0.54) v = Math.min(v, 0.12 + 0.2 * Math.abs(ky - 0.5) * 10);
+
+          return v;
+        }
+        case "thorns": {
+          /* dark plum canes in long strands, armed with pale thorns that
+             point down and out, a few to a hand's length */
+          const warp = (vn(Y * 0.01, 14) - 0.5) * 7;
+          const strand = hash(Math.floor((L + warp) / 6), 2);
+          let v = 0.3 + 0.2 * strand - 0.28 * n + 0.05 * Math.sin((L + warp) * 0.55);
+
+          if (hash(Math.floor((L + warp) / 6) + 40, Math.floor(Y / 130)) > 0.9) v += 0.22;
+
+          const cw = 34;
+          const ch = 88;
+          const cu = (L + hash(Math.floor(Y / ch), 6) * cw) / cw;
+          const col = Math.floor(cu);
+          const fx = cu - col;
+          const row = Math.floor((Y + hash(col, 9) * ch) / ch);
+          const fy = (Y + hash(col, 9) * ch) / ch - row;
+
+          if (hash(col, row + 77) > 0.34 && fy > 0.06 && fy < 0.6) {
+            /* a thorn: broad at the cane, curving down to a sharp point */
+            const k = (fy - 0.06) / 0.54;
+            const xc = 0.2 + 0.5 * k * k;
+            const hw = 0.2 * (1 - k) + 0.02;
+
+            if (Math.abs(fx - xc) < hw) v = 0.99;
+            else if (fx > xc && fx - xc < hw + 0.08) v = 0.03;
+          }
 
           return v;
         }
@@ -1979,11 +2349,12 @@ export default function PixelGrowthTree({
       const rq = Math.max(1, Math.round(r * 2) / 2);
       const pq = Math.round((((ph % 6.2832) + 6.2832) % 6.2832) / 0.5236) * 0.5236;
       const tq = clamp(Math.round(tone * 10) / 10, 0, 1.2);
-      const key = `${rq}|${pq.toFixed(2)}|${tq}|${ramp[0][0]},${ramp[2][1]},${ramp[4][2]}`;
+      const design = ALT_RAMPS.has(ramp) && art.altShape ? art.altShape : art.leafShape;
+      const key = `${design}|${rq}|${pq.toFixed(2)}|${tq}|${ramp[0][0]},${ramp[2][1]},${ramp[4][2]}`;
       let sprite = leafSprites.get(key);
 
       if (!sprite) {
-        const px = leafPixels(art.leafShape, rq, pq, tq);
+        const px = leafPixels(design, rq, pq, tq);
 
         sprite = { dx: px.dx, dy: px.dy, c: px.shade.map((i) => ramp[i]) };
         leafSprites.set(key, sprite);
@@ -2017,7 +2388,7 @@ export default function PixelGrowthTree({
          below), so widening the canvas (and therefore S) without
          live-recomputing this anchor silently drops every leaf's
          vertical position out of alignment with its branch. */
-      const X = AX + (L.x - XF * S) * sg * kx;
+      const X = AX + (L.x + bendWorld(L.y / S, sg) * S - XF * S) * sg * kx;
       const Y = AY + (L.y - YF * S) * sg;
       const r = L.r * (0.55 + 0.45 * sg) * s;
       if (Y + r * 1.3 < 0 || Y - r * 1.3 > H || X + r * 1.3 < 0 || X - r * 1.3 > W) {
@@ -2094,6 +2465,15 @@ export default function PixelGrowthTree({
                   : BARK[clamp(Math.floor(v * 4), 0, 3)],
             );
           }
+        }
+        if (art.limbStyle === "thorn" && w > 0.9 && i % 3 === 1 && hash(i, 53) > 0.25) {
+          const side = hash(i, 54) > 0.5 ? 1 : -1;
+          const tx = Math.round(X + side * (w + 0.6));
+          const ty = Math.round(Y);
+
+          put(tx, ty, BK[5]);
+          put(tx + side, ty + 1, BK[5]);
+          put(tx + side * 2, ty + 2, BK[4]);
         }
       }
     };
@@ -2324,6 +2704,9 @@ export default function PixelGrowthTree({
       birch: { spin: 3.6, sway: 8, hz: 3.0, v: [6, 8.5], drift: 0.5 },
       elm: { spin: 1.1, sway: 6, hz: 1.5, v: [4.2, 6], drift: 1.4 },
       redwood: { spin: 2.6, sway: 2.5, hz: 1.7, v: [7, 10], drift: 0.2 },
+      bean: { spin: 1.6, sway: 9, hz: 2.0, v: [5, 7.5], drift: 0.6 },
+      rose: { spin: 2.2, sway: 11, hz: 2.6, v: [3.6, 5.4], drift: 1.0 },
+      sprig: { spin: 2.2, sway: 8, hz: 2.2, v: [4.5, 6.5], drift: 0.8 },
     };
     const BIG: {
       x: number; y: number; r: number; ph: number; spin: number;
@@ -2492,9 +2875,62 @@ export default function PixelGrowthTree({
 
       /* sylphs: little winged people with a glow and a trail of dust.
          Offsets are drawn facing right and flipped when they turn. */
-      const sylphCount = layersRef.current.has("sylphs")
+      const sylphCount = layersRef.current.has("sylphs") || isBean
         ? 0
         : Math.max(1, Math.round(1 + 4 * asc));
+
+      /* The beanstalk's climb is full of fireflies and old magic instead:
+         fireflies that blink on and off, and glimmering wisps that wind
+         through the air leaving a trail of sparks. */
+      if (isBean && !layersRef.current.has("sylphs")) {
+        const t = reduced ? 0 : tm;
+        const lit = Math.min(1, asc * 1.4);
+
+        for (let k = 0; k < 26; k++) {
+          const bx = hash(k, 11) * W + 9 * Math.sin(t * 0.4 + k * 1.7);
+          const by = hash(k, 12) * (H - 20) + 5 * Math.sin(t * 0.55 + k * 2.3);
+          const x = Math.round(bx);
+          const y = Math.round(by);
+          const blink = 0.5 + 0.5 * Math.sin(t * (1.1 + hash(k, 13) * 1.4) + k * 3.1);
+
+          if (blink < 0.25) continue;
+
+          const a = lit * Math.min(1, (blink - 0.2) * 1.6);
+
+          blendPut(x, y, [226, 255, 130], a);
+          blendPut(x + 1, y, [190, 240, 90], a * 0.45);
+          blendPut(x - 1, y, [190, 240, 90], a * 0.45);
+          blendPut(x, y + 1, [190, 240, 90], a * 0.45);
+          blendPut(x, y - 1, [190, 240, 90], a * 0.45);
+        }
+
+        const MAGIC = [[190, 255, 150], [255, 232, 140], [170, 240, 255], [255, 190, 240]];
+
+        for (let m = 0; m < 5; m++) {
+          const col = MAGIC[m % MAGIC.length];
+
+          for (let k = 9; k >= 0; k--) {
+            const tt = t - k * 0.09;
+            const x = Math.round(W * (0.14 + 0.72 * hash(m, 21)) + (W * 0.2) * Math.sin(tt * (0.45 + hash(m, 22) * 0.3) + m * 1.9));
+            const y = Math.round(H * (0.2 + 0.5 * hash(m, 23)) + (H * 0.22) * Math.sin(tt * (0.62 + hash(m, 24) * 0.3) + m * 2.6));
+
+            if (k === 0) {
+              /* the bright head: a small four-point star that twinkles */
+              const tw = 0.7 + 0.3 * Math.sin(t * 6 + m);
+
+              blendPut(x, y, [255, 255, 240], lit * tw);
+              blendPut(x + 1, y, col, lit * 0.8 * tw);
+              blendPut(x - 1, y, col, lit * 0.8 * tw);
+              blendPut(x, y + 1, col, lit * 0.8 * tw);
+              blendPut(x, y - 1, col, lit * 0.8 * tw);
+              blendPut(x + 2, y, col, lit * 0.35);
+              blendPut(x - 2, y, col, lit * 0.35);
+            } else if (k % 2 === 1 || k < 4) {
+              blendPut(x + ((k * 3 + m) % 3) - 1, y + ((k * 5 + m) % 3) - 1, col, lit * 0.7 * (1 - k / 10));
+            }
+          }
+        }
+      }
       const DRESS = [
         [255, 190, 220],
         [170, 228, 255],
@@ -2674,12 +3110,17 @@ export default function PixelGrowthTree({
               d = Math.min(d, Math.hypot(dx, dy));
             }
 
-            /* flat underside, like a real cumulus */
-            if (d > 1 || py > cl.h * 0.84) continue;
+            /* a flat underside, like a real cumulus, that fades out softly
+               instead of ending on a hard line */
+            if (d > 1) continue;
+
+            const under = clamp((cl.h * 0.95 - py) / (cl.h * 0.3), 0, 1);
+
+            if (under <= 0) continue;
 
             const lit = 1 - py / cl.h;
             const a =
-              (front ? 0.32 : 0.62) * (1 - d * d) ** 0.6 *
+              (front ? 0.32 : 0.62) * (1 - d * d) ** 0.6 * under *
               sm * edge * (0.85 + 0.15 * hash(cx0 + px, cy0 + py));
 
             if (a < 0.02) continue;
@@ -2695,6 +3136,433 @@ export default function PixelGrowthTree({
       }
     };
 
+    /* ---- the beanstalk stands in the clouds ----
+       Jack's stalk is a road to the land above the sky, so it climbs
+       through banks of cloud: a few puffs hide the top of the young
+       stalk, more gather every few hundred feet up the climb, and at the
+       summit the giant's castle stands on a cloud of its own. Puffs sit in
+       the world, so they pass by as the camera climbs; some are behind the
+       stalk and some in front of it. */
+    const BEAN_PUFFS: { x: number; y: number; r: number; front: boolean; ph: number }[] = [];
+
+    if (isBean) {
+      const CR = rng(404);
+
+      for (let tier = 0; tier < 13; tier++) {
+        const y0 = 70 - tier * 270 + (tier === 0 ? 20 : 0);
+
+        for (let k = 0; k < 4; k++) {
+          const side = k % 2 === 0 ? -1 : 1;
+
+          BEAN_PUFFS.push({
+            x: 400 + side * (40 + CR() * 240),
+            y: y0 + (CR() - 0.5) * 120,
+            r: 70 + CR() * 70,
+            front: k >= 2,
+            ph: CR() * 6.3,
+          });
+        }
+      }
+    }
+
+    const drawBeanClouds = (front: boolean, sg: number, kx: number, fade: number) => {
+      const pxu = S * sg;
+      /* clouds are far off, so they stop growing once the camera is close */
+      const size = S * Math.min(sg, 1.4);
+      const discs: [number, number, number][] = [
+        [-0.55, 0.1, 0.62],
+        [0, -0.22, 0.85],
+        [0.58, 0.08, 0.6],
+      ];
+
+      for (const c of BEAN_PUFFS) {
+        if (c.front !== front) continue;
+
+        const drift = reduced ? 0 : Math.sin(MT * 0.06 + c.ph) * 16;
+        const X = AX + (c.x + drift - XF) * pxu * kx;
+        const Y = AY + (c.y - YF) * pxu;
+        const R = c.r * size;
+
+        if (Y + R < -4 || Y - R * 1.1 > H + 4 || X + R * 2.2 < -4 || X - R * 2.2 > W + 4) continue;
+
+        for (let py = Math.max(0, Math.floor(Y - R * 1.1)); py <= Math.min(H - 1, Math.ceil(Y + R * 0.45)); py++) {
+          /* the underside fades out softly rather than ending on a line */
+          const under = clamp((Y + R * 0.42 - py) / (R * 0.5), 0, 1);
+
+          if (under <= 0) continue;
+
+          for (let px = Math.max(0, Math.floor(X - R * 2.2)); px <= Math.min(W - 1, Math.ceil(X + R * 2.2)); px++) {
+            let d = 9;
+
+            for (const [ox, oy, rr] of discs) {
+              const dx = (px + 0.5 - (X + ox * R * 1.4)) / (rr * R * 1.4);
+              const dy = (py + 0.5 - (Y + oy * R)) / (rr * R * 0.8);
+
+              d = Math.min(d, Math.hypot(dx, dy));
+            }
+            if (d > 1) continue;
+
+            const lit = clamp((Y - py) / (R * 0.9) * 0.5 + 0.55, 0, 1);
+            const a = (front ? 0.3 : 0.62) * fade * under * (1 - d * d) ** 0.55 * (0.88 + 0.12 * hash(px, py));
+
+            if (a < 0.03) continue;
+            blendPut(px, py, mixRgb([186, 198, 224], [253, 253, 255], lit), a);
+          }
+        }
+      }
+    };
+
+    /* ---- the castle at the top of the climb ----
+       A 128 x 128 castle sprite (utils/castleSprite) stands far behind the
+       tree: grey brick in staggered courses, round towers with scalloped
+       roofs and gold finials, a round window over an arched door, windows
+       that glow amber. The sleeper's castle (the rose supervine) is
+       overgrown by thorned canes and roses as the climb reaches the top,
+       and its vines go on creeping, very slowly; the giant's castle (the
+       beanstalk) is paler and cooler, with a huge door, a golden harp in
+       its window, a spill of gold, beanstalk tendrils and heart leaves,
+       and a wreath of cloud round its foot. */
+    const castleKind = speciesId === "rosevine" ? "rose" : isBean ? "bean" : null;
+    /* to the right of the climbing trunk, so the door and the window are clear of it */
+    const CASTLE_X = 100;
+    const heartCache = new Map<string, { dx: number[]; dy: number[]; shade: number[] }>();
+    const castlePainter: CastlePainter = {
+      paint: (x, y, c, a) => paint(x, y, c, a),
+      leafPixels: (r, ph, tone) => {
+        const rq = Math.max(1, Math.round(r * 2) / 2);
+        const pq = Math.round((((ph % 6.2832) + 6.2832) % 6.2832) / 0.5236) * 0.5236;
+        const tq = Math.round(tone * 10) / 10;
+        const key = `${rq}|${pq.toFixed(2)}|${tq}`;
+        let px = heartCache.get(key);
+
+        if (!px) {
+          px = leafPixels("bean", rq, pq, tq);
+          heartCache.set(key, px);
+        }
+
+        return px;
+      },
+    };
+    /* the vines grow with the climb, then breathe in and out very slowly */
+    const castleGrowth = (sm: number, lo: number, hi: number): number => {
+      const base = lo + (hi - lo) * sm;
+
+      if (reduced) return base;
+
+      const tri = 0.5 - 0.5 * Math.cos(MT * 0.035);
+
+      return base + 0.07 * tri;
+    };
+    const cloudWreath = (sm: number, ox: number, oy: number, rows: number) => {
+      for (let k = 0; k < 11; k++) {
+        const drift = reduced ? 0 : Math.sin(MT * 0.05 + k * 1.3) * 3;
+        const cx = ox + 2 + k * 12 + drift;
+        const cy = oy + 118 + (k % 3) * 3 - rows;
+        const rx = 11 + (k % 3) * 3;
+        const ry = 5 + (k % 2);
+
+        for (let j = -ry; j <= ry; j++) {
+          for (let i = -rx; i <= rx; i++) {
+            const d = (i * i) / (rx * rx) + (j * j) / (ry * ry);
+
+            if (d > 1) continue;
+            paint(Math.round(cx + i), Math.round(cy + j), j < 1 ? [252, 250, 255] : [214, 208, 238], 0.9 * sm * (1 - d * d * 0.3));
+          }
+        }
+      }
+    };
+    const drawGardenCastle = (sm: number) => {
+      if (!castleKind) return;
+
+      const c = castleSprite(castleKind);
+      const ox = CASTLE_X;
+      const oy = 8;
+      const g = castleGrowth(sm, castleKind === "rose" ? 0.14 : 0.1, castleKind === "rose" ? 0.46 : 0.3);
+      const t = reduced ? 0 : MT;
+
+      /* a pale mist behind it so it stands apart from the foliage */
+      for (let j = -6; j <= 126; j++) {
+        for (let i = -20; i <= 148; i++) {
+          const d = Math.hypot((i - 64) / 82, (j - 62) / 72);
+
+          if (d > 1) continue;
+          paint(ox + i, oy + j, [226, 218, 246], 0.34 * sm * (1 - d) ** 0.6);
+        }
+      }
+      if (castleKind === "rose") cloudWreath(sm, ox, oy, -8);
+      paintCastleSprite(c, castlePainter, ox, oy, sm, g, t);
+      if (castleKind === "bean") cloudWreath(sm, ox, oy, 0);
+
+      /* the door answers a poke: z's from the sleeper's, gold sparks for the giant's */
+      const key = castleKind === "rose" ? "sleeper" : "giant";
+      const poked = sinceKey(key, CLOCK);
+      const flare = poked < 2.5;
+
+      hitsRef.current.push({ key, x: ox + c.door.x, y: oy + c.door.y, w: c.door.w, h: c.door.h });
+      if (reduced) return;
+      if (castleKind === "rose") {
+        const n = flare ? 4 : 2;
+
+        for (let k = 0; k < n; k++) {
+          const ph = (MT * (flare ? 0.55 : 0.26) + k / n) % 1;
+          const zx = Math.round(ox + 74 + ph * 12 + Math.sin(ph * 6 + k) * 2);
+          const zy = Math.round(oy + 84 - ph * 22);
+          const za = (1 - ph) * Math.min(1, ph * 5) * sm;
+
+          for (let i = 0; i < 3; i++) {
+            blendPut(zx + i, zy, [244, 236, 255], za);
+            blendPut(zx + i, zy + 2, [244, 236, 255], za);
+          }
+          blendPut(zx + 1, zy + 1, [244, 236, 255], za);
+        }
+      } else if (flare) {
+        for (let k = 0; k < 14; k++) {
+          const ph = (poked * 0.7 + k * 0.071) % 1;
+          const a = k * 2.4;
+
+          blendPut(Math.round(ox + 64 + Math.cos(a) * 20 * ph), Math.round(oy + 96 - 24 * ph + Math.sin(a) * 6), [255, 224, 120], (1 - ph) * sm);
+        }
+      }
+    };
+
+    /* ---- the top of the climb: magic, cloud and (for the rose) a field of roses ---- */
+    const TOP_TONES: Record<string, number[][]> = {
+      rose: [[255, 140, 210], [190, 140, 255], [255, 205, 160]],
+      bean: [[120, 255, 170], [255, 226, 120], [140, 230, 255]],
+    };
+    /* A field of magic: slow ribbons of light across the top of the frame, a
+       scatter of twinkling sparks, and a ceiling of drifting cloud. */
+    const drawTopMagic = (sm: number) => {
+      if (!castleKind) return;
+
+      const tones = TOP_TONES[castleKind];
+      const t = reduced ? 0 : MT;
+
+      for (let b = 0; b < 3; b++) {
+        const col = tones[b];
+
+        for (let x = 0; x < W; x++) {
+          const yc = 10 + b * 9 + 5 * Math.sin(x * 0.045 + t * 0.045 + b * 2.1) + 2.5 * Math.sin(x * 0.11 - t * 0.07 + b);
+          const wob = 0.55 + 0.45 * Math.sin(x * 0.03 + t * 0.03 + b * 1.7);
+
+          for (let j = -5; j <= 5; j++) {
+            const a = 0.2 * sm * wob * (1 - Math.abs(j) / 5.5) ** 1.4;
+
+            if (a > 0.015) blendPut(x, Math.round(yc + j), col, a);
+          }
+        }
+      }
+      /* sparks that twinkle and drift upward */
+      for (let k = 0; k < 46; k++) {
+        const sp = 0.8 + hash(k, 41) * 1.6;
+        const y = 46 - (((reduced ? 0 : t * sp * 0.25) + hash(k, 42) * 46) % 46) + 2;
+        const x = Math.round(hash(k, 43) * W + 4 * Math.sin(t * 0.05 + k));
+        const tw = 0.5 + 0.5 * Math.sin(t * 0.4 + k * 2.3);
+
+        if (tw < 0.3) continue;
+
+        const col = tones[k % 3];
+        const a = sm * tw;
+
+        blendPut(x, Math.round(y), [255, 255, 245], a);
+        if (tw > 0.75) {
+          blendPut(x + 1, Math.round(y), col, a * 0.7);
+          blendPut(x - 1, Math.round(y), col, a * 0.7);
+          blendPut(x, Math.round(y) + 1, col, a * 0.7);
+          blendPut(x, Math.round(y) - 1, col, a * 0.7);
+        }
+      }
+      /* a ceiling of cloud */
+      for (let k = 0; k < 10; k++) {
+        const cx = ((k * 30 + (reduced ? 0 : t * 0.12)) % (W + 60)) - 30;
+        const rx = 17 + (k % 3) * 4;
+        const ry = 5 + (k % 2);
+
+        for (let j = -ry; j <= ry; j++) {
+          for (let i = -rx; i <= rx; i++) {
+            const d = (i * i) / (rx * rx) + (j * j) / (ry * ry);
+
+            if (d > 1) continue;
+
+            const y = Math.round(1 + j + (k % 2));
+
+            if (y < 0) continue;
+            blendPut(Math.round(cx + i), y, j < 0 ? [252, 250, 255] : [222, 216, 244], 0.74 * sm * (1 - d * d * 0.5));
+          }
+        }
+      }
+    };
+
+    /* The crown the trunk ends in: a bloom of leaves (or blossoms) over the
+       flat top of the climbing trunk. */
+    const drawTrunkCrown = (sm: number, sg: number, kx: number) => {
+      if (!castleKind || !LEAF_RAMPS) return;
+
+      const tx = AX + (cxw(TRUNK_TOP) - XF) * S * sg * kx;
+      const ty = AY + (TRUNK_TOP - YF) * S * sg;
+
+      if (tx < -20 || tx > W + 20 || ty < -20 || ty > H + 20) return;
+      for (let k = 0; k < 22; k++) {
+        const a = hash(k, 51) * 6.283;
+        const d = Math.sqrt(hash(k, 52)) * 15;
+        const ramp = LEAF_RAMPS[k % 3];
+
+        leafCached(
+          tx + Math.cos(a) * d * 1.2,
+          ty - 3 + Math.sin(a) * d * 0.7,
+          3.4 + hash(k, 53) * 2.2,
+          hash(k, 54) * 6,
+          0.5 + hash(k, 55) * 0.35,
+          ramp,
+          sm,
+        );
+      }
+    };
+
+    /* The rose supervine's field of roses, on the cloud at the foot of the
+       castle. Click one and it sways and sparkles; double-click and it
+       bursts into petals, then grows back. */
+    interface FieldRose {
+      x: number;
+      y: number;
+      tone: number;
+      ph: number;
+      seen: number;
+    }
+    const FIELD: FieldRose[] =
+      speciesId === "rosevine"
+        ? Array.from({ length: 15 }, (_, i) => ({
+            x: 12 + i * 15.6 + (hash(i, 61) - 0.5) * 5,
+            y: 128 + (hash(i, 62) - 0.5) * 6 + (i % 2) * 3,
+            tone: i % 4,
+            ph: hash(i, 63) * 6.28,
+            seen: -1,
+          }))
+        : [];
+    const FIELD_BLOOMS = [
+      [[110, 20, 66], [168, 34, 96], [217, 58, 128], [245, 94, 156], [255, 143, 186]],
+      [[120, 40, 80], [196, 88, 124], [234, 133, 166], [251, 180, 202], [255, 227, 236]],
+      [[90, 10, 40], [150, 20, 60], [200, 30, 70], [235, 70, 100], [255, 130, 150]],
+      [[130, 70, 120], [180, 110, 170], [220, 150, 205], [245, 190, 230], [255, 225, 245]],
+    ];
+    const FIELD_PETALS: { x: number; y: number; vx: number; vy: number; life: number; tone: number; r: number }[] = [];
+    const burstAt = (i: number) => burstRef.current[`rosefield${i}`] ?? -1e9;
+
+    const drawRoseField = (sm: number, dt: number) => {
+      if (FIELD.length === 0) return;
+
+      const t = reduced ? 0 : MT;
+
+      FIELD.forEach((r, i) => {
+        const b = burstAt(i);
+        const since = CLOCK - b;
+
+        /* a fresh double-click: throw the petals */
+        if (b > r.seen && since >= 0 && since < 0.5) {
+          r.seen = b;
+          for (let k = 0; k < 20; k++) {
+            const a = (k / 20) * 6.283 + hash(k, i) * 0.6;
+            const sp = 22 + hash(k, i + 70) * 34;
+
+            FIELD_PETALS.push({
+              x: r.x,
+              y: r.y - 8,
+              vx: Math.cos(a) * sp * 1.3,
+              vy: Math.sin(a) * sp * 0.9 - 30,
+              life: 0,
+              tone: r.tone,
+              r: hash(k, i + 80),
+            });
+          }
+        }
+
+        /* the bloom: gone at the burst, a bud, then open again */
+        const grow = since < 0 || since > 40 ? 1 : clamp((since - 0.6) / 7, 0, 1);
+
+        if (grow <= 0) return;
+
+        const sway = reduced ? 0 : Math.round(Math.sin(t * 0.06 + r.ph) * 1.2);
+        const poked = sinceKey(`rosefield${i}`, CLOCK);
+        const wiggle = poked < 1 && !reduced ? Math.round(Math.sin(poked * 24) * (1 - poked) * 2) : 0;
+        const x = Math.round(r.x) + sway + wiggle;
+        const y = Math.round(r.y);
+        const stemH = Math.round(5 + 3 * grow);
+        const ramp = FIELD_BLOOMS[r.tone];
+        const rad = 1.2 + 2.4 * grow;
+
+        for (let j = 0; j < stemH; j++) paint(x, y - j + 3, [52, 120, 62], sm);
+        paint(x - 1, y + 1, [70, 150, 76], sm);
+        paint(x - 2, y, [70, 150, 76], sm);
+        paint(x + 1, y - 1, [70, 150, 76], sm);
+        paint(x + 2, y - 2, [70, 150, 76], sm);
+
+        const cy = y - stemH + 3;
+
+        for (let dy = -4; dy <= 4; dy++) {
+          for (let dx = -4; dx <= 4; dx++) {
+            const d = Math.hypot(dx, dy);
+
+            if (d > rad + 0.2) continue;
+
+            const q = (Math.atan2(dy, dx) / 6.283 + 1 + r.ph + d * 0.3) % 1;
+            let idx = d < 0.8 ? 0 : q < 0.34 ? 2 : q < 0.67 ? 3 : 1;
+
+            if (d > rad - 0.7 && dx >= 0 && dy >= 0) idx = 1;
+            if (dx === -1 && dy === -1 && rad > 2) idx = 4;
+            paint(x + dx, cy + dy, ramp[idx], sm);
+          }
+        }
+        if (poked < 1 && !reduced) {
+          /* a glint on a touched rose */
+          paint(x + 3, cy - 3, [255, 250, 220], sm * (1 - poked));
+          paint(x + 4, cy - 3, [255, 250, 220], sm * (1 - poked) * 0.6);
+          paint(x + 3, cy - 4, [255, 250, 220], sm * (1 - poked) * 0.6);
+        }
+        if (grow > 0.85) hitsRef.current.push({ key: `rosefield${i}`, x: x - 5, y: cy - 6, w: 11, h: 14 });
+      });
+
+      for (let i = FIELD_PETALS.length - 1; i >= 0; i--) {
+        const p = FIELD_PETALS[i];
+
+        p.life += dt;
+        p.vy += 46 * dt;
+        p.vx *= 1 - 0.8 * dt;
+        p.x += p.vx * dt + Math.sin(p.life * 7 + p.r * 6) * 8 * dt;
+        p.y += p.vy * dt;
+        if (p.life > 2.4 || p.y > H + 4) {
+          FIELD_PETALS.splice(i, 1);
+          continue;
+        }
+
+        const ramp = FIELD_BLOOMS[p.tone];
+        const a = sm * clamp(1.6 - p.life * 0.6, 0, 1);
+        const turn = Math.floor(p.life * 6 + p.r * 4) % 3;
+        const x = Math.round(p.x);
+        const y = Math.round(p.y);
+
+        /* a petal is a little 2x3 curl that tumbles, with a pale edge */
+        const body = ramp[3];
+        const edge = ramp[4];
+
+        if (turn === 0) {
+          paint(x, y, body, a);
+          paint(x + 1, y, edge, a);
+          paint(x, y + 1, body, a);
+          paint(x + 1, y + 1, ramp[2], a);
+        } else if (turn === 1) {
+          paint(x, y, edge, a);
+          paint(x, y + 1, body, a);
+          paint(x, y + 2, ramp[2], a);
+          paint(x + 1, y + 1, body, a);
+        } else {
+          paint(x - 1, y + 1, ramp[2], a);
+          paint(x, y, body, a);
+          paint(x + 1, y, edge, a);
+          paint(x + 2, y + 1, body, a);
+        }
+      }
+    };
+
     const render = (P: number, dt: number, tm: number) => {
       hitsRef.current.length = 0;
       cov.fill(0);
@@ -2705,6 +3573,8 @@ export default function PixelGrowthTree({
 
       const g = clamp(P / PA, 0, 1);
       GG = g;
+      BEND_T = tm;
+      CLOCK = tm;
 
       /* Motion clock and how alive the tree is at this growth. Reduced
          motion keeps the static tree. */
@@ -2719,6 +3589,7 @@ export default function PixelGrowthTree({
       const ea = easeInOut(vx);
       const Z = Math.exp(Math.log(art.ZM) * eu);
       const sg = (0.2 + 0.8 * eg) * Z;
+      CURSG = sg;
       const kx = 0.4 + 0.6 * eg;
 
       AX = art.BX + (W / 2 - art.BX) * eu;
@@ -2860,6 +3731,18 @@ export default function PixelGrowthTree({
               put(art.BX + 1, GROUND_ROW - 3, ACN[1]);
               put(art.BX + 2, GROUND_ROW - 4, ACN[1]);
               put(art.BX + 3, GROUND_ROW - 4, ACN[1]);
+            } else if (speciesId === "beanstalk") {
+              /* the magic bean: a speckled kidney, one pip of light */
+              put(art.BX + 5, GROUND_ROW - 2, ACN[0]);
+              put(art.BX + 6, GROUND_ROW - 2, ACN[0]);
+              put(art.BX + 6, GROUND_ROW - 3, ACN[1]);
+              put(art.BX + 7, GROUND_ROW - 3, ACN[0]);
+            } else if (speciesId === "rosevine") {
+              /* a rose hip: a small red berry on the ground */
+              put(art.BX + 5, GROUND_ROW - 2, ACN[0]);
+              put(art.BX + 6, GROUND_ROW - 2, ACN[0]);
+              put(art.BX + 5, GROUND_ROW - 3, ACN[1]);
+              put(art.BX + 6, GROUND_ROW - 3, ACN[0]);
             } else {
               put(art.BX + 6, GROUND_ROW - 2, [120, 84, 62]);
               put(art.BX + 5, GROUND_ROW - 2, [96, 66, 50]);
@@ -2918,9 +3801,14 @@ export default function PixelGrowthTree({
         }
       }
 
+      const beanFade = isBean && !layersRef.current.has("summitclouds") ? smoothstep(0.35, 0.65, g) : 0;
+
+      if (beanFade > 0.01) drawBeanClouds(false, sg, kx, beanFade);
       if (SM > 0.01) {
         if (!layersRef.current.has("summitclouds")) drawSummitClouds(false, SM, dt);
-        drawCanopy(0, SM, sg, kx);
+        /* the castle terrace stands far behind the tree, in the background */
+        if (castleKind && (speciesId === "rosevine" || beanFade > 0.01)) drawGardenCastle(SM);
+        if (!castleKind) drawCanopy(0, SM, sg, kx);
       }
 
       DM = 0;
@@ -2968,21 +3856,44 @@ export default function PixelGrowthTree({
 
       if (vx > 0) {
         for (const stub of ascentStubs) {
-          const [, tY] = pt(
+          const [tX, tY] = pt(
             { sp: [[stub.tipX, stub.tipY]], ws: [1], g0: 0, gd: 1 },
             0,
             sg,
             kx,
           );
           if (tY < -40 - stub.lr[0] * S * sg || tY > H + 40) continue;
-          ascentLimb(stub, sg, kx);
-          if (stub.leafy) drawAscentTuft(stub, sg, kx);
+          /* at the top of the climb the castle stands behind the boughs: let
+             the limbs and tufts that would hide it go, and keep a few at its edges */
+          const castleX = CASTLE_X;
+          const hides =
+            castleKind !== null &&
+            tX > castleX - 4 &&
+            tX < castleX + CASTLE_W + 4 &&
+            tY > 4 &&
+            tY < 136;
+          const opened =
+            castleKind !== null &&
+            hash((stub.tipX * 7) | 0, (stub.tipY * 3) | 0) < (hides ? 0.97 : 0.55) * SM;
+
+          const topX = AX + (cxw(TRUNK_TOP) - XF) * S * sg * kx;
+          const topY = AY + (TRUNK_TOP - YF) * S * sg;
+          const nearTop = Math.abs(tX - topX) < 30 && tY < topY + 40;
+
+          if (!(hides && !nearTop && hash((stub.tipX * 5) | 0, (stub.tipY * 11) | 0) < 0.85 * SM)) ascentLimb(stub, sg, kx);
+          if (stub.leafy && !opened) drawAscentTuft(stub, sg, kx);
         }
       }
 
       if (SM > 0.01) {
-        drawCanopy(1, SM, sg, kx);
+        if (!castleKind) drawCanopy(1, SM, sg, kx);
         if (!layersRef.current.has("summitclouds")) drawSummitClouds(true, SM, dt);
+      }
+      if (beanFade > 0.01) drawBeanClouds(true, sg, kx, beanFade);
+      if (castleKind && SM > 0.01) {
+        drawTrunkCrown(SM, sg, kx);
+        drawTopMagic(SM);
+        drawRoseField(SM, dt);
       }
 
       const uT = clamp((g - 0.03) / 0.2, 0, 1);
@@ -3013,18 +3924,28 @@ export default function PixelGrowthTree({
         if (!reduced && !layersRef.current.has("bigfall")) bigFall(dt, ux > 0, tm);
       }
 
-      /* Birds rest at the tree once it matures: 2-3 perched on the
-         top leaves, hopping to a fresh leaf now and then, wings
-         flicking on the flap. */
-      if (g >= matureG && perches.length > 0 && !layersRef.current.has("birds")) {
+      /* Birds rest on the crown once it has filled out: 2-3 perched on the
+         top leaves, hopping to a fresh leaf now and then, wings flicking
+         on the flap. They fly in from above as the crown completes and
+         lift off again if the tree shrinks. */
+      {
+        const want = g >= BIRDS_AT && perches.length > 0 && !layersRef.current.has("birds") ? 1 : 0;
+        const step = reduced ? 1 : Math.min(dt, 0.1) / 1.4;
+
+        BIRDS_HERE = clamp(
+          BIRDS_HERE + (want > BIRDS_HERE ? step : want < BIRDS_HERE ? -step : 0),
+          0,
+          1,
+        );
+      }
+
+      if (BIRDS_HERE > 0.001) {
         const body = [38, 32, 24];
         const head = [46, 40, 30];
         const beak = [238, 200, 110];
         const hop = reduced ? 0 : Math.floor(tm / 2.4);
         const n = Math.min(3, perches.length);
-        /* Fade in when they arrive with the Mature stage, and fade
-           out softly just before each hop to a fresh perch. */
-        const birthFade = smoothstep(matureG, matureG + 0.05, g);
+        const arrive = smoothstep(0, 1, BIRDS_HERE);
         const hopPhase = reduced ? 0.5 : tm % 2.4;
         const hopFade = reduced
           ? 1
@@ -3032,32 +3953,40 @@ export default function PixelGrowthTree({
               smoothstep(0, 0.3, hopPhase),
               1 - smoothstep(2.1, 2.4, hopPhase),
             );
-        const bf = birthFade * hopFade;
+        const bf = arrive * hopFade;
         const fput = (x: number, y: number, c: number[]) => {
           if (bf >= 0.995) put(x, y, c);
           else blendPut(x, y, c, bf);
         };
+        /* in flight: high above the leaf, sliding in from the side */
+        const air = 1 - arrive;
+
         for (let i = 0; i < n; i++) {
           const spot = perches[(hop * 3 + i * 3) % perches.length];
-          const [wx, wy] = pt(
-            { sp: [[spot.x, spot.y]], ws: [1], g0: 0, gd: 1 },
-            0,
-            sg,
-            kx,
-          );
-          const bx = Math.round(wx + (i - 1) * 6);
-          const by = Math.round(wy - 1);
-          const wing = reduced
-            ? 0
+          /* the leaf, where drawLeaf puts it, and its top edge */
+          const lx = AX + (spot.x + bendWorld(spot.y / S, sg) * S - XF * S) * sg * kx;
+          const ly = AY + (spot.y - YF * S) * sg;
+          const lr = spot.r * (0.55 + 0.45 * sg);
+          const bx = Math.round(lx + (i - 1) * 3 + air * (i % 2 ? 26 : -26));
+          const by = Math.round(ly - lr * 0.7 - 1 - air * 22);
+
+          if (bx < 3 || bx > W - 8 || by < 3 || by > H - 4) continue;
+
+          const wing = reduced || air > 0.02
+            ? air > 0.02
+              ? Math.floor(tm * 9 + i) % 2
+              : 0
             : Math.floor(tm * 2.2 + i * 1.7) % 2;
+
           fput(bx - 1, by - 1, body);
           fput(bx, by - 1, body);
           fput(bx + 1, by - 1, body);
           if (wing) fput(bx + 1, by - 2, body);
+          if (air > 0.02 && wing) fput(bx - 1, by - 2, body);
           fput(bx + 3, by - 1, head);
           fput(bx + 4, by - 1, beak);
           fput(bx, by, body);
-          blendPut(bx, by + 1, [20, 18, 14], 0.3 * bf);
+          if (air <= 0.02) blendPut(bx, by + 1, [20, 18, 14], 0.3 * bf);
         }
       }
 
@@ -3073,7 +4002,7 @@ export default function PixelGrowthTree({
 
             if (L.b > GG) continue;
 
-            const ax = AX + (L.x - XF * S) * sg * kx;
+            const ax = AX + (L.x + bendWorld(L.y / S, sg) * S - XF * S) * sg * kx;
             const ay = AY + (L.y - YF * S) * sg + L.r * (0.55 + 0.45 * sg) * 0.7;
 
             if (ax > 4 && ax < W - 4 && ay > 4 && ay < H - 12) {
@@ -3094,10 +4023,12 @@ export default function PixelGrowthTree({
           });
         }
 
-        drawCharms(charmsRef.current, {
+        const charmEnv: CharmEnv = {
           W,
           H,
           tm,
+          dt: Math.min(dt, 0.1),
+          memo: memoRef.current,
           tick: MT,
           reduced,
           put,
@@ -3114,6 +4045,18 @@ export default function PixelGrowthTree({
             return { cx: cxw(wy), half: Math.max(3, w / 2) };
           },
           groundY: AY + (742 - YF) * pxu,
+          barkTop:
+            ux > 0.02
+              ? TRUNK_TOP
+              : Math.max(
+                  YOUNG_TOP,
+                  TR.sp[
+                    Math.min(
+                      TR.sp.length - 1,
+                      Math.floor(clamp((GG - TR.g0) / TR.gd, 0, 1) * (TR.sp.length - 1)),
+                    )
+                  ][1],
+                ),
           trunkTop:
             ux > 0.02
               ? TRUNK_TOP
@@ -3133,7 +4076,14 @@ export default function PixelGrowthTree({
           foliage: FOLI,
           bark: BARK,
           moss: MS,
-        });
+        };
+
+        drawCharms(charmsRef.current, charmEnv);
+
+        /* For tests and tools: how tall the trunk is and how big the world is on screen. */
+        if (ref.current) {
+          ref.current.dataset.trunk = `${Math.round(charmEnv.trunkTop)},${charmEnv.scale.toFixed(3)},${Math.round(charmEnv.groundY)}`;
+        }
       }
 
       drawAscentAccents(smoothstep(0.04, 0.5, vx), tm);
@@ -3238,11 +4188,19 @@ export default function PixelGrowthTree({
 
           if (key) {
             pokesRef.current[key] = performance.now() / 1000;
-            onCreature?.(key.startsWith("sylph") ? "sylph" : key);
+            onCreature?.(key.startsWith("sylph") ? "sylph" : key.startsWith("rosefield") ? "rosefield" : key);
 
             return;
           }
           onTreeClick?.();
+        }}
+        onDoubleClick={(event) => {
+          const key = creatureAt(event.clientX, event.clientY);
+
+          if (key && key.startsWith("rosefield")) {
+            burstRef.current[key] = performance.now() / 1000;
+            onCreature?.("rosefield-burst");
+          }
         }}
         onPointerMove={(event) => {
           hoverRef.current = creatureAt(event.clientX, event.clientY);

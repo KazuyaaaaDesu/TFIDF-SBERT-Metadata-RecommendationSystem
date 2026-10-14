@@ -1,0 +1,54 @@
+/* The dragged-paper ghost: a document that changes shape over a drop zone. */
+.pdg {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  pointer-events: none;
+  will-change: transform;
+}
+.pdg-stage { position: relative; width: 3.6rem; height: 3.6rem; }
+.pdg-stage > * {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: transform 0.16s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.14s ease-out;
+}
+.pdg-doc { height: 3.3rem; width: 2.6rem; filter: drop-shadow(2px 3px 0 rgb(var(--gray-900) / 0.3)); transform: translate(-50%, -50%) rotate(-6deg); }
+.pdg-folder { height: 2.9rem; width: 3.6rem; opacity: 0; transform: translate(-50%, -50%) scale(0.55); filter: drop-shadow(2px 3px 0 rgb(var(--gray-900) / 0.3)); }
+.pdg-ball { height: 2.9rem; width: 2.9rem; opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+.pdg-stop {
+  opacity: 0; color: rgb(var(--ink)); font-size: 1.6rem; font-weight: 700; line-height: 1;
+  transform: translate(-50%, -50%) scale(0.5); text-shadow: 0 0 0 rgb(var(--surface)), 1px 1px 0 rgb(var(--surface));
+}
+.pdg-count {
+  left: auto; right: -0.15rem; top: -0.1rem; transform: none;
+  min-width: 1.35rem; padding: 0 0.3rem; border: 2px solid rgb(var(--gray-900)); border-radius: 999px;
+  background: rgb(var(--accent)); color: rgb(var(--on-accent)); font-size: 0.7rem; font-weight: 700; line-height: 1.1rem; text-align: center;
+}
+.pdg-label {
+  max-width: 12rem; overflow: hidden; padding: 0.2rem 0.5rem; border: 2px solid rgb(var(--gray-900));
+  border-radius: 0.4rem; background: rgb(var(--surface)); color: rgb(var(--ink));
+  font-size: 0.75rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap;
+  box-shadow: 2px 2px 0 rgb(var(--gray-900) / 0.25);
+}
+
+/* into a folder: the folder appears and the document slips inside it */
+.pdg[data-kind="folder"] .pdg-folder { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.pdg[data-kind="folder"] .pdg-doc { transform: translate(-50%, -62%) scale(0.5) rotate(0deg); opacity: 0.95; }
+.pdg[data-kind="folder"] .pdg-label { background: rgb(var(--accent)); color: rgb(var(--on-accent)); }
+/* over the pet: it crumples */
+.pdg[data-kind="pet"] .pdg-doc { opacity: 0; transform: translate(-50%, -50%) scale(0.4) rotate(40deg); }
+.pdg[data-kind="pet"] .pdg-ball { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-12deg); }
+/* where it cannot go */
+.pdg[data-kind="blocked"] .pdg-doc { opacity: 0.45; }
+.pdg[data-kind="blocked"] .pdg-stop { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.pdg[data-kind="blocked"] .pdg-label { background: rgb(var(--accent-soft)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pdg-stage > * { transition: none; }
+}

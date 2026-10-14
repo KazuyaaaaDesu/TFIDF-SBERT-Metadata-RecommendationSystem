@@ -14,34 +14,45 @@ import {
   useRef,
   useState,
   type MouseEvent,
-  type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { LayoutGrid, List, Lock, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutGrid, List, Lock, Trash2 } from "lucide-react";
+import "./library.css";
+import ResponsiveLabel from "../../components/ResponsiveLabel";
 
 import {
   getRepositoryStats,
   removeFromLibrary,
   researchChat,
   researchChatSuggestions,
+  type FactCheckReport,
   type LibraryEntry,
   type Paper,
   type ResearchChatResponse,
   type ResearchChatScope,
   type ResearchChatSource,
 } from "../../api";
+import ChatMarkdown from "../../components/ChatMarkdown";
 import ConnectedPapersGraph from "../../components/ConnectedPapersGraph";
+import FactCheckPanel from "../../components/FactCheckPanel";
 import MathText from "../../components/MathText";
 import PetFigure from "../../components/PetFigure";
 import Highlight from "../../components/Highlight";
 import PixelBurst from "../../components/retro/PixelBurst";
 import RetroDialog from "../../components/retro/RetroDialog";
-import { crumpledBallDataURL } from "../../components/retro/CrumpledPaper";
+import ContextMenu, { type MenuEntry } from "../../components/ContextMenu";
+import LibraryFolderTree, { type FolderChoice } from "../../components/LibraryFolderTree";
+import { useLibraryFolders } from "../../state/libraryFolders";
+import { flatPaths, folderPath, papersInFolder } from "../../utils/folderTree";
+import PaperDragGhost from "../../components/PaperDragGhost";
+import { beginPaperDrag } from "../../utils/paperDrag";
 import { Button, EmptyState } from "../../components/ui";
 import { emitPetChat } from "../../utils/petChat";
 import { contextTerm } from "../../utils/petMarkov";
 import { readSettings } from "../../utils/preferences";
 import { useSiteMode } from "../../state/siteMode";
+import ProPackButton from "../../components/ProPack";
+import { PRO_PACK_QUEST_NOTE } from "../../utils/proPack";
 
 /* The pills shown before the conversation has anything to follow up on;
    after each answer they are replaced by model-written follow-ups. */
@@ -53,35 +64,64 @@ const DEFAULT_QUESTION_PILLS = [
 
 /* ------------------------------------------------------------ */
 
+const FOLDER_CHOICE_KEY = "paperrec_library_folder";
+const FOLDER_SUB_KEY = "paperrec_library_folder_sub";
+
+function readFolderChoice(): FolderChoice {
+  try {
+    const raw = window.localStorage.getItem(FOLDER_CHOICE_KEY);
+
+    if (raw === "unfiled") return "unfiled";
+    if (raw && /^\d+$/.test(raw)) return Number(raw);
+  } catch {
+    /* best-effort */
+  }
+
+  return "all";
+}
+
+function readIncludeSub(): boolean {
+  try {
+    return window.localStorage.getItem(FOLDER_SUB_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /* The pet's drag payload (see PixelPet.tsx): JSON {id, title?}. */
 const PAPER_DROP_MIME = "application/x-research-paper";
 
-/* Crumpled-paper drag ghost, prepared once. */
-let dragGhost: HTMLImageElement | null = null;
+/* A 1x1 transparent image, prepared once: it replaces the native drag image. */
+let blankDragImage: HTMLImageElement | null = null;
 
-function getDragGhost(): HTMLImageElement | null {
-  if (dragGhost) return dragGhost;
+function getBlankDragImage(): HTMLImageElement | null {
+  if (blankDragImage) return blankDragImage;
   const img = new Image();
-  img.src = crumpledBallDataURL(96);
-  void img.decode().catch(() => undefined);
-  dragGhost = img;
+  img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+  blankDragImage = img;
   return img;
 }
 
 function startPaperDrag(
   event: React.DragEvent<HTMLElement>,
   paper: Paper,
+  ids: number[] = [paper.id],
 ) {
+  // `id`/`title` is what the pet reads; `ids` lets a folder take the whole
+  // selection when a selected paper is dragged.
   event.dataTransfer.setData(
     PAPER_DROP_MIME,
-    JSON.stringify({ id: paper.id, title: paper.title }),
+    JSON.stringify({ id: paper.id, title: paper.title, ids }),
   );
   event.dataTransfer.effectAllowed = "move";
 
-  const ghost = getDragGhost();
-  if (ghost) {
-    event.dataTransfer.setDragImage(ghost, 32, 32);
+  // Hide the browser's flat drag image: PaperDragGhost draws a document
+  // that changes shape over a drop zone (see utils/paperDrag.ts).
+  const blank = getBlankDragImage();
+  if (blank) {
+    event.dataTransfer.setDragImage(blank, 0, 0);
   }
+  beginPaperDrag({ title: paper.title ?? "Untitled paper", count: ids.length, x: event.clientX, y: event.clientY });
 }
 
 /* The shared bordered-chip look across the page's controls. */
@@ -123,6 +163,14 @@ function yearBins(papers: Paper[]): { label: string; count: number }[] {
     }));
 }
 
+/* Spine colour: a stable tone (0-5) per subject. */
+function toneOf(paper: Paper): number {
+  const key = paper.subject_category?.split(":", 1)[0]?.trim() || "";
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return h % 6;
+}
+
 function categoryOf(paper: Paper) {
   const parts = paper.subject_category?.split(":", 2).map((p) => p.trim());
   return { subject: parts?.[0] ?? "", category: parts?.[1] ?? "" };
@@ -155,11 +203,22 @@ export default function MyLibraryPro({
   const navigate = useNavigate();
   const [tab, setTab] = useState<ProTab>("library");
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"list" | "grid">("list");
+  const [view, setView] = useState<"list" | "grid">("grid");
   const [pill, setPill] = useState<"all" | "pdf" | "recent" | "unsorted">(
     "all",
   );
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  /* Folders (the sidebar), the folder being viewed and the menus on papers. */
+  const folders = useLibraryFolders();
+  const [folderChoice, setFolderChoice] = useState<FolderChoice>(readFolderChoice);
+  const [includeSub, setIncludeSub] = useState(readIncludeSub);
+  const [paperMenu, setPaperMenu] = useState<{ x: number; y: number; papers: Paper[]; title?: string } | null>(null);
+  const [newFolderFor, setNewFolderFor] = useState<Paper[] | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderError, setNewFolderError] = useState<string | null>(null);
+  const [removeFor, setRemoveFor] = useState<Paper[] | null>(null);
+  const [folderNote, setFolderNote] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [stats, setStats] = useState<{
@@ -182,6 +241,8 @@ export default function MyLibraryPro({
     scope?: ResearchChatScope;
     /** Follow-up questions for the pills, written after this answer. */
     suggestions?: string[];
+    /** Each claim checked against the sources it cites. */
+    factCheck?: FactCheckReport | null;
   };
 
   type ChatConversation = {
@@ -193,6 +254,7 @@ export default function MyLibraryPro({
 
   const CHAT_HISTORY_KEY = "paperrec_library_chat_hist";
   const CHAT_SIDEBAR_KEY = "paperrec_library_chat_sidebar";
+  const CHAT_FACTCHECK_KEY = "paperrec_library_chat_factcheck";
   const CHAT_HISTORY_LIMIT = 20;
 
   const [conversations, setConversations] = useState<ChatConversation[]>(
@@ -210,6 +272,15 @@ export default function MyLibraryPro({
   const [chatText, setChatText] = useState("");
   const [chatScope, setChatScope] = useState<ResearchChatScope>("library");
   const [chatBusy, setChatBusy] = useState(false);
+  /* Check every answer's claims against the sources it cites (on by
+     default; it costs one extra model call per answer). */
+  const [factCheckOn, setFactCheckOn] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(CHAT_FACTCHECK_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
   const [suggestBusy, setSuggestBusy] = useState(false);
   const suggestSeq = useRef(0);
   const [chatSidebarOpen, setChatSidebarOpen] = useState<boolean>(() => {
@@ -230,6 +301,29 @@ export default function MyLibraryPro({
       // best-effort
     }
   }, [conversations]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        CHAT_FACTCHECK_KEY,
+        factCheckOn ? "1" : "0",
+      );
+    } catch {
+      // best-effort
+    }
+  }, [factCheckOn]);
+
+  /* Jump to (and briefly flash) source n of one answer. */
+  function goToSource(anchor: string, n: number) {
+    const element = document.getElementById(`${anchor}-${n}`);
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.classList.add("ring-4", "ring-accent");
+    window.setTimeout(
+      () => element.classList.remove("ring-4", "ring-accent"),
+      1400,
+    );
+  }
 
   useEffect(() => {
     try {
@@ -417,6 +511,7 @@ export default function MyLibraryPro({
             ? papers.map((paper) => paper.id)
             : undefined,
         history,
+        factCheck: factCheckOn,
       });
 
       setConversations((prev) =>
@@ -433,6 +528,7 @@ export default function MyLibraryPro({
                     sources: data.sources,
                     usedFallback: data.used_fallback,
                     scope: chatScope,
+                    factCheck: data.fact_check ?? null,
                   },
                 ],
               }
@@ -498,13 +594,28 @@ export default function MyLibraryPro({
 
   const q = query.trim().toLowerCase();
 
+  const inChosenFolder = useMemo<Set<number> | null>(() => {
+    if (folderChoice === "all") return null;
+
+    if (folderChoice === "unfiled") {
+      return new Set(
+        papers.filter((paper) => (folders.memberships[String(paper.id)] ?? []).length === 0).map((p) => p.id),
+      );
+    }
+
+    return papersInFolder(folders.folders, folders.memberships, folderChoice, includeSub);
+  }, [folderChoice, includeSub, papers, folders.folders, folders.memberships]);
+
   const filtered = useMemo(() => {
     const withPill = papers.filter((paper) => {
+      if (inChosenFolder && !inChosenFolder.has(paper.id)) return false;
+
       if (pill === "pdf") {
         return paper.stored_path?.toLowerCase().endsWith(".pdf");
       }
       if (pill === "unsorted") {
-        return !paper.subject_category;
+        // The same test the "Unsorted" shelf uses, so the chip and the shelf agree.
+        return !categoryOf(paper).subject;
       }
       if (pill === "recent") {
         return (paper.publication_year ?? 0) >= 2023;
@@ -523,11 +634,199 @@ export default function MyLibraryPro({
           .includes(q) ||
         (paper.author ?? "").toLowerCase().includes(q),
     );
-  }, [papers, pill, q]);
+  }, [papers, pill, q, inChosenFolder]);
+
+  const deskEntries = useMemo(
+    () =>
+      [...entries]
+        .sort((a, b) => (b.saved_at ?? "").localeCompare(a.saved_at ?? ""))
+        .slice(0, 4),
+    [entries],
+  );
+
+  // An empty folder is empty; a folder with papers that the filters hide is not.
+  const folderIsEmpty = folderChoice !== "all" && inChosenFolder !== null && inChosenFolder.size === 0;
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const pageStart = (page - 1) * pageSize;
+  // Deleting, filtering or filing can leave the current page past the end:
+  // always draw a page that exists.
+  const safePage = Math.min(Math.max(1, page), pageCount);
+  const pageStart = (safePage - 1) * pageSize;
   const paged = filtered.slice(pageStart, pageStart + pageSize);
+
+  /* Shelves: the current page grouped by subject. */
+  const shelves = useMemo(() => {
+    const map = new Map<string, Paper[]>();
+    for (const paper of paged) {
+      const key = categoryOf(paper).subject || "Unsorted";
+      map.set(key, [...(map.get(key) ?? []), paper]);
+    }
+    return [...map.entries()];
+  }, [paged]);
+
+
+  // Selected papers that are no longer in the library (removed here, in
+  // another tab or by the pet) must not linger in the selection.
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current;
+
+      const present = new Set(papers.map((paper) => paper.id));
+      const kept = new Set([...current].filter((id) => present.has(id)));
+
+      return kept.size === current.size ? current : kept;
+    });
+  }, [papers]);
+
+  // Keep the stored page number valid too (the pager reads safePage).
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
+  /* ---------------- folders: choosing, filing, menus ---------------- */
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FOLDER_CHOICE_KEY, String(folderChoice));
+      window.localStorage.setItem(FOLDER_SUB_KEY, includeSub ? "1" : "0");
+    } catch {
+      /* best-effort */
+    }
+  }, [folderChoice, includeSub]);
+
+  // A folder that was deleted (here or elsewhere) falls back to All papers.
+  useEffect(() => {
+    if (
+      folders.loaded &&
+      typeof folderChoice === "number" &&
+      !folders.folders.some((folder) => folder.id === folderChoice)
+    ) {
+      setFolderChoice("all");
+    }
+  }, [folders.loaded, folders.folders, folderChoice]);
+
+  function chooseFolder(choice: FolderChoice) {
+    setFolderChoice(choice);
+    setPage(1);
+    setFolderNote(null);
+  }
+
+  function say(message: string) {
+    setFolderNote(message);
+    window.setTimeout(() => setFolderNote((current) => (current === message ? null : current)), 4000);
+  }
+
+  async function filePapers(folderId: number, ids: number[]) {
+    const name = folders.folders.find((folder) => folder.id === folderId)?.name ?? "the folder";
+
+    try {
+      const result = await folders.addPapers(folderId, ids);
+
+      say(
+        result.changed > 0
+          ? `Added ${result.changed} paper${result.changed === 1 ? "" : "s"} to “${name}”.`
+          : `Already in “${name}”.`,
+      );
+    } catch (cause) {
+      say(cause instanceof Error ? cause.message : "Could not add to the folder.");
+    }
+  }
+
+  async function unfilePapers(folderId: number, ids: number[]) {
+    const name = folders.folders.find((folder) => folder.id === folderId)?.name ?? "the folder";
+
+    try {
+      const result = await folders.removePapers(folderId, ids);
+
+      say(`Took ${result.changed} paper${result.changed === 1 ? "" : "s"} out of “${name}”.`);
+    } catch (cause) {
+      say(cause instanceof Error ? cause.message : "Could not remove from the folder.");
+    }
+  }
+
+  async function createFolderWith(name: string, targets: Paper[]) {
+    try {
+      const made = await folders.createFolder(name, typeof folderChoice === "number" ? folderChoice : null);
+
+      await folders.addPapers(made.id, targets.map((paper) => paper.id));
+      setNewFolderFor(null);
+      say(`Made “${made.name}” with ${targets.length} paper${targets.length === 1 ? "" : "s"}.`);
+    } catch (cause) {
+      setNewFolderError(cause instanceof Error ? cause.message : "Could not create the folder.");
+    }
+  }
+
+  /** The papers a menu acts on: the whole selection if the clicked paper is in it. */
+  function menuTargets(paper: Paper): Paper[] {
+    return selectedIds.has(paper.id) && selectedIds.size > 1
+      ? papers.filter((candidate) => selectedIds.has(candidate.id))
+      : [paper];
+  }
+
+  function paperMenuEntries(targets: Paper[]): MenuEntry[] {
+    const many = targets.length > 1;
+    const ids = targets.map((paper) => paper.id);
+    const paths = flatPaths(folders.folders);
+    const entries: MenuEntry[] = [];
+
+    if (!many) {
+      entries.push({ id: "open", label: "Open", onSelect: () => viewer.openPaper(targets[0]) });
+      entries.push({ id: "sep0", separator: true });
+    }
+
+    entries.push({ id: "fh", heading: many ? `Folders for ${targets.length} papers` : "Folders" });
+
+    for (const row of paths.slice(0, 40)) {
+      const inAll = ids.every((id) => folders.foldersOf(id).includes(row.id));
+
+      entries.push({
+        id: `f-${row.id}`,
+        label: row.path,
+        checked: inAll,
+        onSelect: () => void (inAll ? unfilePapers(row.id, ids) : filePapers(row.id, ids)),
+      });
+    }
+
+    entries.push({
+      id: "new",
+      label: many ? "New folder with these papers…" : "New folder with this paper…",
+      onSelect: () => {
+        setNewFolderError(null);
+        setNewFolderName("");
+        setNewFolderFor(targets);
+      },
+    });
+
+    if (typeof folderChoice === "number" && ids.some((id) => folders.foldersOf(id).includes(folderChoice))) {
+      entries.push({
+        id: "unfile",
+        label: `Remove from “${folders.folders.find((f) => f.id === folderChoice)?.name ?? "this folder"}”`,
+        onSelect: () => void unfilePapers(folderChoice, ids),
+      });
+    }
+
+    entries.push({ id: "sep1", separator: true });
+    entries.push({
+      id: "remove",
+      label: many ? `Remove ${targets.length} papers from library…` : "Remove from library…",
+      danger: true,
+      onSelect: () => setRemoveFor(targets),
+    });
+
+    return entries;
+  }
+
+  function openPaperMenu(event: React.MouseEvent, paper: Paper) {
+    event.preventDefault();
+    const targets = menuTargets(paper);
+
+    setPaperMenu({
+      x: event.clientX,
+      y: event.clientY,
+      papers: targets,
+      title: targets.length > 1 ? `${targets.length} papers` : undefined,
+    });
+  }
 
   function toggleSelected(id: number) {
     setSelectedIds((current) => {
@@ -553,17 +852,47 @@ export default function MyLibraryPro({
     );
   }
 
+  /** A click on a card or row opens the paper, except on its own controls. */
+  function openFromCard(event: React.MouseEvent, paper: Paper) {
+    if ((event.target as HTMLElement).closest("button, input, a, label, select, textarea")) {
+      return;
+    }
+
+    // Ending a drag on the pet is not a click on the paper.
+    if (window.getSelection()?.toString()) return;
+
+    viewer.openPaper(paper);
+  }
+
+  const removing = useRef<Set<number>>(new Set());
+
   async function handleRemove(paper: Paper, event?: MouseEvent<HTMLButtonElement>) {
+    // A double-click (or a menu action racing the button) must not remove twice.
+    if (removing.current.has(paper.id)) return;
+    removing.current.add(paper.id);
+
     if (event) {
       burstAt(event);
     }
-    await removeFromLibrary(paper.id);
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      next.delete(paper.id);
-      return next;
-    });
-    onRemoved(paper.id);
+
+    try {
+      await removeFromLibrary(paper.id);
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(paper.id);
+        return next;
+      });
+      onRemoved(paper.id);
+      void folders.refresh();
+    } catch (cause) {
+      say(
+        cause instanceof Error
+          ? `Could not remove “${paper.title}”: ${cause.message}`
+          : `Could not remove “${paper.title}”.`,
+      );
+    } finally {
+      removing.current.delete(paper.id);
+    }
   }
 
   /* Dashboard aggregates. */
@@ -692,9 +1021,61 @@ export default function MyLibraryPro({
 
       {/* ================= LIBRARY ================= */}
       {tab === "library" && (
-        <div className="flex flex-col gap-3">
+        <div className="lib-layout">
+        <LibraryFolderTree
+          api={folders}
+          total={papers.length}
+          active={folderChoice}
+          onChoose={chooseFolder}
+          includeSubfolders={includeSub}
+          onIncludeSubfolders={(value) => {
+            setIncludeSub(value);
+            setPage(1);
+          }}
+          onFilePapers={(folderId, ids) => void filePapers(folderId, ids)}
+          onSelectFolder={(folderId) =>
+            setSelectedIds(papersInFolder(folders.folders, folders.memberships, folderId, includeSub))
+          }
+        />
+        <div className="lib-page flex min-w-0 flex-col gap-6">
+          {/* On my desk: the most recently saved papers */}
+          {deskEntries.length > 0 && (
+            <section className="lib-desk" aria-label="On my desk">
+              <div className="lib-desk-head">
+                <h2 className="lib-desk-title font-pixelify">On my desk</h2>
+                <span className="lib-desk-sub">Your latest saves</span>
+              </div>
+              <div className="lib-desk-row">
+                {deskEntries.map((entry) => (
+                  <button
+                    key={entry.paper.id}
+                    type="button"
+                    data-lib-tone={toneOf(entry.paper)}
+                    onClick={() => viewer.openPaper(entry.paper)}
+                    draggable
+                    onDragStart={(event) =>
+                      startPaperDrag(event, entry.paper, selectedIds.has(entry.paper.id) ? [...selectedIds] : [entry.paper.id])
+                    }
+                    className="lib-desk-item"
+                  >
+                    <h4>
+                      <MathText text={entry.paper.title} />
+                    </h4>
+                    <small>
+                      {entry.paper.author ?? "Unknown author"}
+                      {entry.paper.publication_year
+                        ? ` · ${entry.paper.publication_year}`
+                        : ""}
+                    </small>
+                  </button>
+                ))}
+              </div>
+              <div className="lib-desk-edge" />
+            </section>
+          )}
+
           {/* Ask box — routes to the Chat tab when PRO is unlocked */}
-          <div className="font-pixelify rounded border-[3px] border-gray-900 bg-white p-4">
+          <div className="font-pixelify lib-panel p-4">
             <div className="flex items-center gap-2">
               {locked && (
                 <span
@@ -739,8 +1120,25 @@ export default function MyLibraryPro({
             </p>
           </div>
 
+          {/* Which folder is open, and the last folder action */}
+          {(folderChoice !== "all" || folderNote) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink" aria-live="polite">
+              {folderChoice !== "all" && (
+                <span className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-muted">
+                  Viewing:{" "}
+                  <span className="text-ink">
+                    {folderChoice === "unfiled" ? "Unfiled papers" : folderPath(folders.folders, folderChoice)}
+                  </span>
+                  {" · "}
+                  {filtered.length} paper{filtered.length === 1 ? "" : "s"}
+                </span>
+              )}
+              {folderNote && <span className="text-xs text-muted">{folderNote}</span>}
+            </div>
+          )}
+
           {/* Filters */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded border-[3px] border-gray-900 bg-white p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 lib-panel p-3">
             <div className="flex flex-wrap items-center gap-1.5">
               {(
                 [
@@ -780,7 +1178,7 @@ export default function MyLibraryPro({
                 className="ui-input min-h-10 w-56 px-3 py-2 text-sm"
               />
 
-              <div className="flex rounded border-[3px] border-gray-900 bg-white p-0.5">
+              <div className="flex lib-panel p-0.5">
                 <button
                   type="button"
                   aria-pressed={view === "list"}
@@ -813,11 +1211,23 @@ export default function MyLibraryPro({
 
           {/* Selection bar */}
           {selectedCount > 0 && (
-            <div className="flex flex-wrap items-center gap-3 rounded border-[3px] border-gray-900 bg-accentSoft px-4 py-2">
+            <div className="flex flex-wrap items-center gap-3 rounded-xl bg-accentSoft px-4 py-2">
               <span className="font-mono text-xs font-bold text-ink">
                 {selectedCount} selected
               </span>
-              <div className="ml-auto">
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const targets = papers.filter((paper) => selectedIds.has(paper.id));
+
+                    setPaperMenu({ x: rect.left, y: rect.bottom + 4, papers: targets, title: `${targets.length} selected` });
+                  }}
+                >
+                  Folders…
+                </Button>
                 <Button
                   type="button"
                   variant="secondary"
@@ -831,78 +1241,103 @@ export default function MyLibraryPro({
 
           {/* Papers */}
           {filtered.length === 0 ? (
-            <div className="rounded border-[3px] border-gray-900 bg-white p-6">
+            <div className="lib-panel p-6">
               <EmptyState
-                title="No papers match."
-                description="Try a different filter or search term."
+                title={folderIsEmpty ? "Nothing in this folder." : "No papers match."}
+                description={
+                  folderIsEmpty
+                    ? "Drag papers onto the folder, or right-click a paper and choose a folder."
+                    : "Try a different filter or search term."
+                }
                 figure={<PetFigure size={72} />}
               />
             </div>
           ) : view === "grid" ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {paged.map((paper) => (
-                <article
-                  key={paper.id}
-                  draggable
-                  onDragStart={(event) => startPaperDrag(event, paper)}
-                  className={`cursor-grab rounded border-[3px] border-gray-900 bg-white p-4 active:cursor-grabbing ${
-                    selectedIds.has(paper.id)
-                      ? "shadow-[inset_0_0_0_3px_var(--accent)]"
-                      : ""
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${paper.title}`}
-                      checked={selectedIds.has(paper.id)}
-                      onChange={() => toggleSelected(paper.id)}
-                      className="mt-1 h-4 w-4 accent-[#1f5f8b]"
-                    />
-                    <button
-                      type="button"
-                      aria-label="Remove paper from collection"
-                      onClick={(event) => void handleRemove(paper, event)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded border-[3px] border-gray-900 bg-white text-muted transition-colors hover:bg-accent hover:text-onAccent"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+            <div>
+              {shelves.map(([subject, shelfPapers]) => (
+                <section key={subject} className="lib-shelf">
+                  <div className="lib-shelf-label">
+                    <h3 className="font-pixelify">{subject}</h3>
+                    <span>
+                      {shelfPapers.length} on this shelf
+                    </span>
                   </div>
-                  <h3 className="mt-2 font-pixelify text-sm font-bold leading-5 text-ink">
-                    <MathText text={paper.title} />
-                  </h3>
-                  <p className="mt-1 text-xs text-muted">
-                    {paper.author ?? "Unknown author"} ·{" "}
-                    {paper.publication_year ?? "—"}
-                  </p>
-                  {paper.abstract && (
-                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted">
-                      <Highlight text={paper.abstract} terms={q ? [q] : []} />
-                    </p>
-                  )}
-                  <PaperChips paper={paper} />
+                  <div className="lib-shelf-row">
+                    {shelfPapers.map((paper) => (
+                      <article
+                        key={paper.id}
+                        draggable
+                        data-lib-tone={toneOf(paper)}
+                        data-selected={selectedIds.has(paper.id)}
+                        onDragStart={(event) => startPaperDrag(event, paper, selectedIds.has(paper.id) ? [...selectedIds] : [paper.id])}
+                        onClick={(event) => openFromCard(event, paper)}
+                        onContextMenu={(event) => openPaperMenu(event, paper)}
+                        className="lib-cover cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${paper.title}`}
+                            checked={selectedIds.has(paper.id)}
+                            onChange={() => toggleSelected(paper.id)}
+                            className="mt-1 h-4 w-4 accent-[#1f5f8b]"
+                          />
+                          <span className="lib-cover-year">
+                            {paper.publication_year ?? "—"}
+                          </span>
+                        </div>
+                        <h3 className="mt-2 font-pixelify text-sm font-bold leading-5 text-ink">
+                          <MathText text={paper.title} />
+                        </h3>
+                        <p className="mt-1 text-xs text-muted">
+                          {paper.author ?? "Unknown author"}
+                        </p>
+                        {paper.abstract && (
+                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted">
+                            <Highlight
+                              text={paper.abstract}
+                              terms={q ? [q] : []}
+                            />
+                          </p>
+                        )}
+                        <PaperChips paper={paper} />
 
-                  <div className="mt-3 flex flex-wrap gap-2 border-t-[2px] border-gray-200 pt-3">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => viewer.openPaper(paper)}
-                    >
-                      View
-                    </Button>
+                        <div className="mt-auto flex items-center gap-2 pt-3">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => viewer.openPaper(paper)}
+                          >
+                            View
+                          </Button>
+                          <button
+                            type="button"
+                            aria-label="Remove paper from collection"
+                            onClick={(event) => void handleRemove(paper, event)}
+                            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-surface text-muted transition-colors hover:bg-accent hover:text-onAccent"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                </article>
+                  <div className="lib-shelf-plank" aria-hidden="true" />
+                </section>
               ))}
             </div>
           ) : (
-            <div className="overflow-hidden rounded border-[3px] border-gray-900 bg-white">
+            <div className="lib-list">
               {paged.map((paper) => (
                 <div
                   key={paper.id}
                   draggable
-                  onDragStart={(event) => startPaperDrag(event, paper)}
-                  className={`flex cursor-grab items-start gap-3 border-b border-gray-200 p-3 last:border-b-0 active:cursor-grabbing ${
-                    selectedIds.has(paper.id) ? "bg-accentSoft/60" : ""
+                  onDragStart={(event) => startPaperDrag(event, paper, selectedIds.has(paper.id) ? [...selectedIds] : [paper.id])}
+                  onClick={(event) => openFromCard(event, paper)}
+                  onContextMenu={(event) => openPaperMenu(event, paper)}
+                  data-lib-tone={toneOf(paper)}
+                  className={`lib-row cursor-grab active:cursor-grabbing ${
+                    selectedIds.has(paper.id) ? "!bg-accentSoft/60" : ""
                   }`}
                 >
                   <input
@@ -938,7 +1373,7 @@ export default function MyLibraryPro({
                       type="button"
                       aria-label="Remove paper from collection"
                       onClick={(event) => void handleRemove(paper, event)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded border-[3px] border-gray-900 bg-white text-muted transition-colors hover:bg-accent hover:text-onAccent"
+                      className="inline-flex h-9 w-9 items-center justify-center lib-panel text-muted transition-colors hover:bg-accent hover:text-onAccent"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -955,7 +1390,7 @@ export default function MyLibraryPro({
           </p>
 
           {/* Pagination */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded border-[3px] border-gray-900 bg-white px-4 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 lib-panel px-4 py-2">
             <span className="font-mono text-xs text-muted">
               {filtered.length === 0
                 ? "0 papers"
@@ -968,22 +1403,26 @@ export default function MyLibraryPro({
             <div className="flex items-center gap-2">
               <Button
                 type="button"
+                aria-label="Previous page"
+                title="Previous page"
                 variant="secondary"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                onClick={() => setPage(Math.max(1, safePage - 1))}
               >
-                ‹ Prev
+                <ResponsiveLabel icon={ChevronLeft}>Prev</ResponsiveLabel>
               </Button>
               <span className="font-mono text-xs text-muted">
-                {page} / {pageCount}
+                {safePage} / {pageCount}
               </span>
               <Button
                 type="button"
+                aria-label="Next page"
+                title="Next page"
                 variant="secondary"
-                disabled={page >= pageCount}
-                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                disabled={safePage >= pageCount}
+                onClick={() => setPage(Math.min(pageCount, safePage + 1))}
               >
-                Next ›
+                <ResponsiveLabel icon={ChevronRight}>Next</ResponsiveLabel>
               </Button>
 
               <label className="ml-2 flex items-center gap-1.5 text-xs text-muted">
@@ -1005,6 +1444,7 @@ export default function MyLibraryPro({
               </label>
             </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -1471,6 +1911,18 @@ export default function MyLibraryPro({
                       {label}
                     </button>
                   ))}
+                  <label
+                    className="ml-1 inline-flex cursor-pointer items-center gap-1.5 text-xs font-bold text-muted"
+                    title="After each answer, check every claim against the sources it cites"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={factCheckOn}
+                      onChange={(event) => setFactCheckOn(event.target.checked)}
+                      className="h-3.5 w-3.5 accent-gray-900"
+                    />
+                    Fact-check answers
+                  </label>
                 </div>
                 <Button
                   type="button"
@@ -1506,14 +1958,14 @@ export default function MyLibraryPro({
                       message.role === "user" ? (
                         <div
                           key={index}
-                          className="self-end max-w-[min(640px,92%)] rounded-xl rounded-br-sm border-[3px] border-gray-900 bg-accent px-4 py-3 text-sm leading-6 text-onAccent"
+                          className="self-end max-w-[min(640px,92%)] whitespace-pre-wrap rounded-xl rounded-br-sm border-[3px] border-gray-900 bg-accent px-4 py-3 text-sm leading-6 text-onAccent [overflow-wrap:anywhere]"
                         >
                           {message.content}
                         </div>
                       ) : (
                         <div
                           key={index}
-                          className="flex max-w-full flex-col gap-3"
+                          className="flex min-w-0 max-w-full flex-col gap-3"
                         >
                           {message.scope && (
                             <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted">
@@ -1524,14 +1976,29 @@ export default function MyLibraryPro({
                             </p>
                           )}
 
-<div className="self-start max-w-[min(720px,100%)] rounded-xl rounded-bl-sm border-[3px] border-gray-900 bg-white px-4 py-3 text-sm leading-6 text-ink">
-                          <ChatAnswer
-                            content={message.content.replace(
-                              /【(\d+)】/g,
-                              "[$1]",
-                            )}
-                          />
-                        </div>
+<div className="min-w-0 self-start max-w-[min(720px,100%)] rounded-xl rounded-bl-sm border-[3px] border-gray-900 bg-white px-4 py-3 text-sm leading-6 text-ink">
+                            <ChatMarkdown
+                              content={message.content}
+                              onCite={(n) =>
+                                goToSource(
+                                  `src-${activeConversation?.id}-${index}`,
+                                  n,
+                                )
+                              }
+                            />
+                          </div>
+
+                          {message.factCheck && (
+                            <FactCheckPanel
+                              report={message.factCheck}
+                              onCite={(n) =>
+                                goToSource(
+                                  `src-${activeConversation?.id}-${index}`,
+                                  n,
+                                )
+                              }
+                            />
+                          )}
 
                           {message.usedFallback && (
                             <p className="text-xs text-muted">
@@ -1552,6 +2019,7 @@ export default function MyLibraryPro({
                                   (source, sourceIndex) => (
                                     <ChatSourceRow
                                       key={sourceIndex}
+                                      anchorId={`src-${activeConversation?.id}-${index}-${sourceIndex + 1}`}
                                       source={source}
                                       index={sourceIndex + 1}
                                       papers={papers}
@@ -1640,6 +2108,75 @@ export default function MyLibraryPro({
 
       {burst && <PixelBurst key={burst.key} x={burst.x} y={burst.y} />}
 
+      <PaperDragGhost />
+
+      {paperMenu && (
+        <ContextMenu
+          x={paperMenu.x}
+          y={paperMenu.y}
+          title={paperMenu.title ?? paperMenu.papers[0]?.title}
+          ariaLabel="Paper actions"
+          entries={paperMenuEntries(paperMenu.papers)}
+          onClose={() => setPaperMenu(null)}
+        />
+      )}
+
+      <RetroDialog
+        open={newFolderFor !== null}
+        title="New folder"
+        confirmLabel="Create folder"
+        onCancel={() => setNewFolderFor(null)}
+        onConfirm={() => {
+          if (newFolderFor) void createFolderWith(newFolderName, newFolderFor);
+        }}
+      >
+        <label className="block text-sm font-bold text-ink" htmlFor="lib-new-folder-name">
+          Folder name
+        </label>
+        <input
+          id="lib-new-folder-name"
+          autoFocus
+          value={newFolderName}
+          maxLength={80}
+          onChange={(event) => setNewFolderName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && newFolderFor) void createFolderWith(newFolderName, newFolderFor);
+          }}
+          placeholder="e.g. Thesis, chapter 2"
+          className="ui-input mt-1"
+        />
+        <p className="mt-2 text-xs text-muted">
+          {newFolderFor?.length === 1 ? "This paper" : `These ${newFolderFor?.length ?? 0} papers`} will go in it
+          {typeof folderChoice === "number" ? `, inside “${folderPath(folders.folders, folderChoice)}”` : ""}.
+        </p>
+        {newFolderError && (
+          <p role="alert" className="mt-2 rounded border-2 border-gray-900 bg-accentSoft px-2 py-1 text-xs text-ink">
+            {newFolderError}
+          </p>
+        )}
+      </RetroDialog>
+
+      <RetroDialog
+        open={removeFor !== null}
+        title="Remove from library"
+        confirmLabel="Remove"
+        onCancel={() => setRemoveFor(null)}
+        onConfirm={() => {
+          const targets = removeFor ?? [];
+
+          setRemoveFor(null);
+          void (async () => {
+            for (const paper of targets) await handleRemove(paper);
+          })();
+        }}
+      >
+        <p className="text-sm leading-6 text-ink">
+          Remove{" "}
+          {removeFor && removeFor.length === 1 ? <strong>{removeFor[0].title}</strong> : `${removeFor?.length ?? 0} papers`}{" "}
+          from your library? They are also taken out of every folder. The papers stay in the repository.
+        </p>
+      </RetroDialog>
+
       <RetroDialog
         open={confirmDeleteAll}
         title="Delete chat history"
@@ -1661,104 +2198,17 @@ export default function MyLibraryPro({
 
 /* ------------------------------------------------------------ */
 
-/** Render one line's inline markdown: **bold**, *italic*, `code`.
- *  Anything else passes through verbatim. */
-function renderInline(text: string): ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
-
-  return parts.map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
-      return (
-        <strong key={index} className="font-bold">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-
-    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
-      return (
-        <code
-          key={index}
-          className="rounded border-[1px] border-gray-900 bg-canvas px-1 font-mono text-[0.9em]"
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-
-    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
-      return (
-        <em key={index} className="italic">
-          {part.slice(1, -1)}
-        </em>
-      );
-    }
-
-    return part;
-  });
-}
-
-/** Render the assistant's markdown-ish answer as structured blocks:
- *  headings -> bold lines, "-"/"*" bullets -> lists, blank lines ->
- *  paragraphs. */
-function ChatAnswer({ content }: { content: string }) {
-  const lines = content.split("\n");
-  const blocks: ReactNode[] = [];
-  let list: ReactNode[] = [];
-
-  const flushList = () => {
-    if (list.length > 0) {
-      blocks.push(
-        <ul key={`list-${blocks.length}`} className="ml-4 list-disc space-y-1">
-          {list}
-        </ul>,
-      );
-      list = [];
-    }
-  };
-
-  lines.forEach((line, index) => {
-    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
-    const heading = line.match(/^(#{1,3})\s+(.*)$/);
-
-    if (bullet) {
-      list.push(<li key={index}>{renderInline(bullet[1])}</li>);
-      return;
-    }
-
-    flushList();
-
-    if (heading) {
-      blocks.push(
-        <p key={`h-${index}`} className="font-bold">
-          {renderInline(heading[2])}
-        </p>,
-      );
-      return;
-    }
-
-    if (line.trim() === "") {
-      return;
-    }
-
-    blocks.push(
-      <p key={`p-${index}`}>{renderInline(line)}</p>,
-    );
-  });
-
-  flushList();
-
-  return <div className="space-y-1.5">{blocks}</div>;
-}
-
 /* ------------------------------------------------------------ */
 
 function ChatSourceRow({
+  anchorId,
   source,
   index,
   papers,
   viewer,
 }: {
+  /** DOM id the answer's [n] markers and the fact-check scroll to. */
+  anchorId: string;
   source: ResearchChatSource;
   index: number;
   papers: Paper[];
@@ -1776,7 +2226,10 @@ function ChatSourceRow({
   );
 
   return (
-    <div className="flex flex-col gap-1.5 border-t border-gray-200 px-3 py-2.5 text-xs first:border-t-0">
+    <div
+      id={anchorId}
+      className="flex scroll-mt-4 flex-col gap-1.5 border-t border-gray-200 px-3 py-2.5 text-xs transition-shadow first:border-t-0"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border-[2px] border-gray-900 bg-white font-mono text-[10px] font-bold text-ink">
           {index}
@@ -1808,8 +2261,8 @@ function ChatSourceRow({
       </p>
 
       {source.abstract && (
-        <p className="line-clamp-3 leading-5 text-muted">
-          {source.abstract}
+        <p className="line-clamp-3 leading-5 text-muted [overflow-wrap:anywhere]">
+          <MathText text={source.abstract} />
         </p>
       )}
 
@@ -1881,12 +2334,18 @@ function LockedTab({
             Unlock every PRO tab by growing any tree in the Lab's garden
             past its Young stage — Seed → Seedling → Sapling → Young (Young
             oak 1500 fertilizer, Young maple 1450, birch 1580, elm 1600,
-            redwood 1350).
+            redwood 1350, beanstalk 1300, rose supervine 1480).
           </p>
 
-          <Button type="button" onClick={onOpenGarden}>
-            Open the Lab's garden
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" onClick={onOpenGarden}>
+              Open the Lab's garden
+            </Button>
+            <ProPackButton variant="button" />
+          </div>
+          <p className="max-w-xl text-xs leading-5 text-muted">
+            Or skip the wait with the demo Pro Pack. {PRO_PACK_QUEST_NOTE}
+          </p>
         </>
       )}
     </div>

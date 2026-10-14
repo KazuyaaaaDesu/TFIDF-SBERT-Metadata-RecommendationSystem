@@ -1,0 +1,256 @@
+/* ENGINE — "Blueprint".
+   A wide drawing sheet: title block, sheet index, thin lines, registration
+   marks, dimension-style labels and numbered callouts that tie the diagram
+   to the text. Colours come only from the theme tokens. */
+
+.eng-shell { max-width: 1520px; }
+
+/* ---- title block ---- */
+.eng-shell .eng-banner {
+  border: 1px solid rgb(var(--gray-900));
+  border-radius: 0;
+  background: rgb(var(--surface));
+  padding: 0;
+  gap: 0;
+  position: relative;
+  box-shadow: 0 0 0 4px rgb(var(--canvas)), 0 0 0 5px rgb(var(--gray-900));
+  margin-bottom: 1.75rem;
+}
+.eng-shell .eng-banner > * { padding: 0.6rem 1rem; align-self: stretch; display: flex; align-items: center; }
+.eng-shell .eng-banner > * + * { border-left: 1px solid rgb(var(--gray-900)); }
+.eng-shell .eng-banner > nav[aria-label="Manuals"] a { border-width: 1px; border-radius: 0; }
+.eng-stamp {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: rgb(var(--muted));
+}
+.eng-shell #wiki-search { border-width: 1px; border-radius: 0; }
+@media (max-width: 639px) {
+  .eng-shell .eng-banner > * + * { border-left: 0; border-top: 1px solid rgb(var(--gray-900)); }
+  .eng-shell .eng-banner > * { width: 100%; }
+  .eng-shell .eng-banner > .ml-auto { margin-left: 0; }
+}
+
+/* ---- layout: sheet index | drawing ---- */
+.eng-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+@media (min-width: 1024px) {
+  .eng-grid { grid-template-columns: 12.5rem minmax(0, 1fr); gap: 1.75rem; }
+  .eng-railtoggle { display: none; }
+}
+
+.eng-railtoggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  border: 1px solid rgb(var(--gray-900));
+  background: rgb(var(--surface));
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  font-size: 0.8rem;
+  color: rgb(var(--ink));
+}
+.eng-railtoggle > span:first-child {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgb(var(--accent));
+}
+.eng-railtoggle > span:nth-child(2) { flex: 1; font-weight: 700; }
+
+.eng-rail { counter-reset: engsheet engcall; }
+.eng-rail nav {
+  border: 1px solid rgb(var(--gray-900)) !important;
+  border-radius: 0 !important;
+  background: rgb(var(--surface)) !important;
+}
+.eng-rail nav > p {
+  background: transparent !important;
+  color: rgb(var(--muted)) !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgb(var(--gray-900)) !important;
+  font-size: 10px !important;
+}
+.eng-rail nav[aria-label="Wiki navigation"] > p,
+.eng-rail > nav:first-child > p { color: rgb(var(--ink)) !important; }
+.eng-rail li > a { border-radius: 0; font-weight: 600; font-size: 11.5px; line-height: 1.3; }
+.eng-rail li > a[aria-current="page"] { background: rgb(var(--accent)); color: rgb(var(--on-accent)); }
+.eng-rail > nav:first-child li > a::before {
+  counter-increment: engsheet;
+  content: counter(engsheet, decimal-leading-zero) " ";
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  opacity: 0.7;
+  white-space: pre;
+}
+/* the callout list repeats the numbers printed on the sheet */
+.eng-rail nav[aria-label="On this page"] li.eng-top > a::before {
+  counter-increment: engcall;
+  content: counter(engcall);
+  display: inline-grid;
+  place-items: center;
+  width: 1.3em;
+  height: 1.3em;
+  margin-right: 0.45em;
+  border: 1px solid rgb(var(--accent));
+  border-radius: 999px;
+  color: rgb(var(--accent));
+  font-size: 10px;
+}
+.eng-rail nav[aria-label="On this page"] li.eng-top > a { display: flex; align-items: center; }
+
+/* ---- the sheet ---- */
+.eng-article {
+  counter-reset: engsec;
+  background-image:
+    linear-gradient(rgb(var(--gray-300) / 0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--gray-300) / 0.35) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
+  padding: 0.5rem;
+  border: 1px solid rgb(var(--gray-900));
+}
+@media (min-width: 640px) { .eng-article { padding: 1.5rem 1.75rem; } }
+.eng-eyebrow {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: rgb(var(--muted));
+  margin: 0.5rem 0 0.4rem;
+}
+.eng-article > h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); letter-spacing: -0.03em; }
+/* dimension line under the drawing title */
+.eng-article > h1::after {
+  content: "";
+  display: block;
+  height: 9px;
+  margin-top: 0.7rem;
+  border-left: 1px solid rgb(var(--gray-900));
+  border-right: 1px solid rgb(var(--gray-900));
+  background: linear-gradient(rgb(var(--gray-900)), rgb(var(--gray-900))) center / 100% 1px no-repeat;
+  opacity: 0.7;
+}
+.eng-flow { display: block; }
+.eng-flow > * + * { margin-top: 1.75rem; }
+
+.eng-article [class*="border-[3px]"] { border-width: 1px; border-radius: 0; }
+.eng-article table { font-size: 0.85rem; }
+.eng-article table th { font-family: ui-monospace, monospace; }
+
+/* top-level sections are drafting sheets: thin frame, corner registration marks */
+.eng-article section[id]:not(section section) {
+  position: relative;
+  counter-increment: engsec;
+  padding: 1.25rem 0.85rem 1rem;
+  border: 1px solid rgb(var(--gray-900));
+  background-color: rgb(var(--surface));
+  --eng-mark: linear-gradient(rgb(var(--accent)), rgb(var(--accent)));
+  background-image:
+    var(--eng-mark), var(--eng-mark), var(--eng-mark), var(--eng-mark),
+    var(--eng-mark), var(--eng-mark), var(--eng-mark), var(--eng-mark);
+  background-repeat: no-repeat;
+  background-size: 14px 2px, 2px 14px, 14px 2px, 2px 14px, 14px 2px, 2px 14px, 14px 2px, 2px 14px;
+  background-position:
+    5px 5px, 5px 5px,
+    calc(100% - 5px) 5px, calc(100% - 5px) 5px,
+    5px calc(100% - 5px), 5px calc(100% - 5px),
+    calc(100% - 5px) calc(100% - 5px), calc(100% - 5px) calc(100% - 5px);
+}
+@media (min-width: 640px) { .eng-article section[id]:not(section section) { padding: 1.75rem 2rem 1.5rem; } }
+
+/* numbered callout + dimension line on every sheet heading */
+.eng-article section[id] > h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 0;
+  padding: 0;
+  font-size: 1.3rem;
+}
+.eng-article section[id] > h2::before {
+  content: counter(engsec);
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 2px solid rgb(var(--accent));
+  border-radius: 999px;
+  background: rgb(var(--surface));
+  color: rgb(var(--accent));
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.eng-article section[id] > h2::after {
+  content: "";
+  flex: 1;
+  min-width: 1rem;
+  height: 9px;
+  border-left: 1px solid rgb(var(--gray-500));
+  border-right: 1px solid rgb(var(--gray-500));
+  background: linear-gradient(rgb(var(--gray-500)), rgb(var(--gray-500))) center / 100% 1px no-repeat;
+}
+.eng-article section[id] > h3 {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1px dashed rgb(var(--gray-500));
+}
+.eng-article section > div > * + * { margin-top: 1rem; }
+.eng-article section p:not(figure p):not(aside p):not(table p) { max-width: 80ch; line-height: 1.7; }
+
+/* notes become drawing notes */
+.eng-article aside {
+  border: 1px dashed rgb(var(--gray-500)) !important;
+  border-left: 4px solid rgb(var(--accent)) !important;
+  border-radius: 0 !important;
+}
+.eng-article figure { border-radius: 0; }
+
+/* the pipeline schematic: wide canvas */
+.eng-article figure[data-eng-diagram] { background: rgb(var(--canvas)); }
+.eng-article figure[data-eng-diagram] > div:nth-of-type(2) { max-height: 560px !important; }
+
+.eng-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.25rem 1.25rem;
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border-top: 1px dashed rgb(var(--gray-500));
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.35;
+  counter-reset: none;
+}
+.eng-legend li { display: flex; align-items: baseline; gap: 0.5rem; color: rgb(var(--ink)); }
+.eng-legend li > span:last-child { min-width: 0; }
+.eng-legend em { display: block; font-style: normal; color: rgb(var(--muted)); font-size: 11px; }
+.eng-pin {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1.5px solid rgb(var(--accent));
+  border-radius: 999px;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  color: rgb(var(--accent));
+  background: rgb(var(--surface));
+}
+
+/* pager + footer share the sheet */
+.eng-flow > nav[aria-label="Previous and next page"] a { border-radius: 0; background: rgb(var(--surface)); }
+.eng-flow > footer { border-radius: 0; background: rgb(var(--surface)); }
+
+@media (min-width: 1024px) { .eng-grid > .eng-railtoggle { display: none; } }

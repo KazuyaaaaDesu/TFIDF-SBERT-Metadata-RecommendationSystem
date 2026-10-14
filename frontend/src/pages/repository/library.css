@@ -1,0 +1,166 @@
+/* My Library: "bookshelf and desk". Flat shelves, soft covers, roomy.
+   Colours come only from theme tokens. */
+.lib-page { --lib-gap: 1.75rem; }
+
+.lib-panel {
+  border-radius: 1rem;
+  border: 1px solid rgb(var(--gray-200));
+  background: rgb(var(--surface));
+}
+
+/* ---- On my desk ---- */
+.lib-desk {
+  position: relative;
+  border-radius: 1.25rem;
+  padding: 1.1rem 1.25rem 0;
+  background: rgb(var(--accent) / 0.08);
+  border: 1px solid rgb(var(--accent) / 0.25);
+  overflow: hidden;
+}
+.lib-desk-head {
+  display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap;
+  margin-bottom: .9rem;
+}
+.lib-desk-title {
+  font-size: 1.15rem; font-weight: 700; color: rgb(var(--ink));
+}
+.lib-desk-sub { font-size: .75rem; color: rgb(var(--muted)); }
+.lib-desk-row {
+  display: grid; gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 260px));
+  padding-bottom: 1.1rem;
+}
+.lib-desk-item {
+  display: flex; flex-direction: column; gap: .35rem; text-align: left;
+  padding: .85rem .95rem; border-radius: .6rem .6rem .6rem .6rem;
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--gray-200));
+  border-left: 6px solid var(--lib-tone);
+  box-shadow: 0 6px 10px -6px rgb(var(--ink) / 0.35);
+  transition: transform .15s ease;
+  cursor: pointer;
+}
+.lib-desk-item:nth-child(odd) { transform: rotate(-.5deg); }
+.lib-desk-item:nth-child(even) { transform: rotate(.4deg); }
+.lib-desk-item:hover { transform: translateY(-3px) rotate(0); }
+.lib-desk-item h4 {
+  font-size: .85rem; font-weight: 700; line-height: 1.25rem; color: rgb(var(--ink));
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.lib-desk-item small { font-size: .7rem; color: rgb(var(--muted)); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.lib-desk-edge {
+  height: .6rem; margin: 0 -1.25rem;
+  background: rgb(var(--accent) / 0.25);
+}
+
+/* ---- Shelves ---- */
+.lib-shelf { margin-top: var(--lib-gap); }
+.lib-shelf-label {
+  display: flex; align-items: baseline; gap: .6rem;
+  margin-bottom: .9rem; padding: 0 .25rem;
+}
+.lib-shelf-label h3 { font-size: 1rem; font-weight: 700; color: rgb(var(--ink)); }
+.lib-shelf-label span { font-size: .75rem; color: rgb(var(--muted)); }
+.lib-shelf-row {
+  display: grid; gap: 1.1rem; align-items: stretch;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  padding: 0 .75rem;
+}
+.lib-shelf-plank {
+  height: .9rem; border-radius: 0 0 .5rem .5rem;
+  background: rgb(var(--gray-200));
+  border-top: 3px solid rgb(var(--gray-300));
+  box-shadow: 0 8px 12px -8px rgb(var(--ink) / 0.35);
+}
+.lib-cover {
+  position: relative; display: flex; flex-direction: column;
+  padding: 1rem 1rem .9rem 1.5rem;
+  border-radius: .35rem .8rem .8rem .35rem;
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--gray-200));
+  box-shadow: 3px 4px 0 -1px rgb(var(--ink) / 0.12);
+  transition: transform .15s ease;
+}
+.lib-cover::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: .8rem;
+  border-radius: .35rem 0 0 .35rem;
+  background: var(--lib-tone);
+}
+.lib-cover:hover { transform: translateY(-4px); }
+.lib-cover[data-selected="true"] { outline: 3px solid rgb(var(--accent)); outline-offset: 2px; }
+.lib-cover-year {
+  font-size: .7rem; font-weight: 700; letter-spacing: .1em; color: rgb(var(--muted));
+}
+
+/* Spine tones: tints of theme tokens only. */
+[data-lib-tone="0"] { --lib-tone: rgb(var(--accent)); }
+[data-lib-tone="1"] { --lib-tone: rgb(var(--accent) / 0.55); }
+[data-lib-tone="2"] { --lib-tone: rgb(var(--ink) / 0.8); }
+[data-lib-tone="3"] { --lib-tone: rgb(var(--muted)); }
+[data-lib-tone="4"] { --lib-tone: rgb(var(--accent) / 0.3); }
+[data-lib-tone="5"] { --lib-tone: rgb(var(--gray-500)); }
+
+/* List view rows */
+.lib-list { display: flex; flex-direction: column; gap: .6rem; }
+.lib-row {
+  display: flex; align-items: flex-start; gap: .85rem;
+  padding: 1rem 1.1rem; border-radius: .75rem;
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--gray-200));
+  border-left: 6px solid var(--lib-tone);
+}
+
+@media (max-width: 640px) {
+  .lib-desk { padding: .9rem 1rem 0; }
+  .lib-desk-edge { margin: 0 -1rem; }
+  .lib-shelf-row { padding: 0 .25rem; }
+  .lib-row { flex-wrap: wrap; }
+}
+
+/* ---- folders (the sidebar) ---- */
+.lib-layout { display: grid; gap: 1.25rem; }
+@media (min-width: 1024px) {
+  .lib-layout { grid-template-columns: 17rem minmax(0, 1fr); align-items: start; }
+  .lib-folders { position: sticky; top: 0.5rem; max-height: calc(100dvh - 2rem); overflow-y: auto; }
+}
+.lib-folders {
+  padding: 0.75rem;
+  border: 2px solid rgb(var(--gray-900));
+  border-radius: 0.75rem;
+  background: rgb(var(--surface));
+}
+.lib-folders-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.lib-folders-head h2 { font-size: 1rem; font-weight: 700; color: rgb(var(--ink)); }
+.lib-folder-icon-btn {
+  display: inline-flex; height: 1.9rem; width: 1.9rem; align-items: center; justify-content: center;
+  border: 2px solid rgb(var(--gray-900)); border-radius: 0.4rem; background: rgb(var(--surface));
+  color: rgb(var(--ink)); cursor: pointer;
+}
+.lib-folder-icon-btn:hover { background: rgb(var(--accent)); color: rgb(var(--on-accent)); }
+.lib-folder-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lib-folder-row {
+  display: flex; width: 100%; align-items: center; gap: 0.4rem; padding: 0.3rem 0.4rem;
+  border: 2px solid transparent; border-radius: 0.4rem; background: transparent;
+  color: rgb(var(--ink)); font-size: 0.85rem; text-align: left; cursor: pointer; user-select: none;
+}
+.lib-folder-row:hover { background: rgb(var(--accent-soft)); }
+.lib-folder-row:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 1px; }
+.lib-folder-row[data-active="true"] { background: rgb(var(--accent)); color: rgb(var(--on-accent)); }
+.lib-folder-row[data-drop="true"] { border-color: rgb(var(--gray-900)); border-style: dashed; background: rgb(var(--accent-soft)); }
+.lib-folder-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.lib-folder-count { flex-shrink: 0; font-family: ui-monospace, monospace; font-size: 0.7rem; opacity: 0.75; }
+.lib-folder-twist, .lib-folder-more {
+  display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center;
+  height: 1.3rem; width: 1.3rem; border: 0; border-radius: 0.3rem; background: transparent; color: inherit; cursor: pointer;
+}
+.lib-folder-more { opacity: 0; }
+.lib-folder-row:hover .lib-folder-more, .lib-folder-row:focus-within .lib-folder-more, .lib-folder-more:focus-visible { opacity: 1; }
+.lib-folder-twist:hover, .lib-folder-more:hover { background: rgb(var(--gray-900) / 0.15); }
+.lib-folder-edit { min-width: 0; flex: 1; }
+.lib-folder-edit-row { padding: 0.15rem 0.4rem; }
+.lib-folder-msg {
+  margin-top: 0.5rem; padding: 0.4rem 0.5rem; border: 2px solid rgb(var(--gray-900)); border-radius: 0.4rem;
+  background: rgb(var(--accent-soft)); font-size: 0.75rem; color: rgb(var(--ink));
+}
+.lib-folder-hint { margin-top: 0.6rem; font-size: 0.75rem; line-height: 1.4; color: rgb(var(--muted)); }
+.lib-folder-sub { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem; font-size: 0.78rem; color: rgb(var(--ink)); cursor: pointer; }

@@ -162,7 +162,7 @@ export default function CheatConsole() {
       data-cheat-console=""
       className="fixed inset-x-0 top-14 z-[95] mx-auto w-[min(34rem,calc(100vw-1.5rem))]"
     >
-      <div className="wood-board rounded-lg border-[3px] border-[#2a190b] p-3 shadow-[6px_6px_0_rgba(0,0,0,0.35)]">
+      <div className="wood-board rounded-lg border-[3px] border-[color:var(--gm-edge)] p-3 shadow-[6px_6px_0_rgba(0,0,0,0.35)]">
         <p className="wood-label mb-2 flex items-center justify-between font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
           <span>Cheat console</span>
           <span className="opacity-80">` to close · Esc</span>
@@ -197,7 +197,7 @@ export default function CheatConsole() {
             placeholder="type a cheat word…"
             autoComplete="off"
             spellCheck={false}
-            className="wood-chip-inset min-h-9 min-w-0 flex-1 rounded border-[3px] px-2.5 font-mono text-[13px] placeholder:text-[#f6e3bd]/60"
+            className="wood-chip-inset min-h-9 min-w-0 flex-1 rounded border-[3px] px-2.5 font-mono text-[13px] placeholder:text-[color:var(--gm-text)]/60"
           />
           <button
             type="submit"

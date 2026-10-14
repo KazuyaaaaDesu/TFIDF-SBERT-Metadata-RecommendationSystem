@@ -25,8 +25,8 @@ export interface GardenToast {
 }
 
 const TONE: Record<ToastTone, { bar: string; tag: string; label: string }> = {
-  milestone: { bar: "bg-[#2b8a3e]", tag: "bg-[#d3f9d8] text-[#1f7a33]", label: "Milestone" },
-  "cheat-on": { bar: "bg-[#b45309]", tag: "bg-[#ffe8b3] text-[#7a3a05]", label: "Cheat on" },
+  milestone: { bar: "bg-accent", tag: "bg-accent text-onAccent", label: "Milestone" },
+  "cheat-on": { bar: "bg-gray-900", tag: "bg-gray-900 text-onInk", label: "Cheat on" },
   "cheat-off": { bar: "bg-gray-500", tag: "bg-accentSoft text-ink", label: "Cheat off" },
 };
 
